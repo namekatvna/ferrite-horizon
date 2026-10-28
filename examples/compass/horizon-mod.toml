@@ -5,4 +5,5 @@ description = "Ferrite showcase: a HUD with position, facing and time. /compass 
 authors = ["namekatvna"]
 api = "0.1"
 side = "client"
-capabilities = ["game-read", "hud", "storage", "command", "chat"]
+capabilities = ["game-read", "hud", "storage", "command", "chat", "ui"]
+experimental = ["ui"]

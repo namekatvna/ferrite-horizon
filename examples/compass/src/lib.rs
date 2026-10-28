@@ -34,6 +34,7 @@ impl Mod for Compass {
     fn init(hooks: &mut Hooks<Self>) -> Result<Self, Error> {
         hooks
             .on_tick(Self::tick)
+            .settings(Self::settings_page)
             .command("compass", Self::compass)
             .command("day", Self::day);
         Ok(Self {
@@ -43,6 +44,29 @@ impl Mod for Compass {
 }
 
 impl Compass {
+    fn settings_page(&self, page: &mut Page<Self>) {
+        page.toggle("Visible", self.settings.visible, |m, on| {
+            m.change(|s| s.visible = on)
+        })
+        .cycle(
+            "Corner",
+            &Corner::ALL,
+            &self.settings.corner,
+            |m, corner| m.change(|s| s.corner = corner),
+        )
+        .button("Reset", |m| {
+            if let Err(error) = m.settings.reset() {
+                log::warn(format!("compass: {error}"));
+            }
+        });
+    }
+
+    fn change(&mut self, edit: impl FnOnce(&mut Settings)) {
+        if let Err(error) = self.settings.update(edit) {
+            log::warn(format!("compass: {error}"));
+        }
+    }
+
     fn tick(&mut self, _tick: u64) {
         let (Some(player), Some(clock)) = (game::player(), game::clock()) else {
             hud::clear();

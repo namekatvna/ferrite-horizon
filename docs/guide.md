@@ -53,6 +53,7 @@ capabilities = ["chat"]
 | `hud` | `hud` |
 | `storage`, `Config` | `storage` |
 | `command` | `command` |
+| `ui`, `hooks.settings` | `ui`, also listed in `experimental = ["ui"]` |
 
 ## A complete mod
 
@@ -110,6 +111,8 @@ Or copy `target/horizon-mod/<id>.hmod` into `horizon-mods/` next to the game's `
 | `every_seconds(n, f)` | `fn(&mut self)` | once every `n` seconds |
 | `on_frame(f)` | `fn(&mut self, f32)` | every frame, with its duration in seconds |
 | `on_chat(f)` | `fn(&mut self, &str)` | every chat line the player receives |
+| `settings(f)` | `fn(&self, &mut Page<Self>)` | builds the mod's page in Options > Mods |
+| `on_screen_closed(f)` | `fn(&mut self)` | the player left the mod's screen |
 
 Handlers are methods (`Self::greet`) or closures without captures (`|m, _| m.ticks += 1`). Registering a command name twice keeps the last handler. A leading `/` in the name is ignored. Timers count ticks since the mod loaded and fire after each full interval; any number can be registered.
 
@@ -274,6 +277,51 @@ settings.reset()?;
 | The file is broken or has a wrong type | defaults are used, a warning is logged, the file is left for the player to fix |
 
 `Config::load()` uses `config.json`; `Config::load_named("waypoints")` uses `waypoints.json`. `Config` derefs to your struct. `update` and `reset` save immediately; `reload()` reads the file again.
+
+## Settings page and screens (`ui`)
+
+Experimental: needs `capabilities = ["ui"]` and `experimental = ["ui"]` in `horizon-mod.toml`.
+
+A page is built by a function of the mod's state. Each interactive widget carries its handler, so there are no widget ids to track. After a handler runs, Ferrite builds the pages again and sends only what changed.
+
+```rust
+impl Mod for Compass {
+    fn init(hooks: &mut Hooks<Self>) -> Result<Self, Error> {
+        hooks.settings(Self::settings_page).command("waypoints", Self::waypoints);
+        Ok(Self { settings: Config::load(), waypoints: Vec::new() })
+    }
+}
+
+impl Compass {
+    fn settings_page(&self, page: &mut Page<Self>) {
+        page.toggle("Visible", self.settings.visible, |m, on| m.change(|s| s.visible = on))
+            .cycle("Corner", &Corner::ALL, &self.settings.corner, |m, c| m.change(|s| s.corner = c))
+            .button("Reset", |m| { let _ = m.settings.reset(); });
+    }
+
+    fn waypoints(&mut self, _args: Args) -> CommandResult {
+        ui::open(Self::waypoint_screen);
+        Ok(None)
+    }
+
+    fn waypoint_screen(&self, page: &mut Page<Self>) {
+        page.set_title("Waypoints")
+            .list(&self.waypoints, None, |m, name| m.travel(name))
+            .button("Close", |_| ui::close());
+    }
+}
+```
+
+| Widget | Shows | Handler gets |
+|---|---|---|
+| `text(s)`, `colored(s, color)` | a line of text | nothing |
+| `item(id, name)` | an item icon and a name | nothing |
+| `button(label, f)` | a button | `fn(&mut self)` |
+| `toggle(label, value, f)` | `label: ON/OFF` | the new value |
+| `cycle(label, options, current, f)` | `label: current` | the next option |
+| `list(options, selected, f)` | rows to pick from | the picked option |
+
+The settings page appears once the mod loads and is rebuilt when the player opens it. `ui::open(f)` shows a screen over the game (a second call replaces it), `ui::close()` closes it, and `ui::refresh()` rebuilds both after a change made elsewhere, for example in a tick handler. Pages hold at most 64 widgets; texts are cut to 256 characters, lists to 512 rows. `set_title` only applies to screens: the settings page is titled with the mod's name.
 
 ## Data (`storage`)
 
