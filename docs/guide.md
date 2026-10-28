@@ -78,7 +78,7 @@ impl Greeter {
         let name = args.word(0).unwrap_or("world");
         self.greeted += 1;
         chat::show(format!("Hello, {name}!"));
-        Ok(Some(format!("Greeted {} times", self.greeted)))
+        reply(format!("Greeted {} times", self.greeted))
     }
 
     fn tick(&mut self, _tick: u64) {}
@@ -106,6 +106,7 @@ Or copy `target/horizon-mod/<id>.hmod` into `horizon-mods/` next to the game's `
 | Registration | Handler signature | Called |
 |---|---|---|
 | `command("name", f)` | `fn(&mut self, Args) -> CommandResult` | `/name ...` typed by the player |
+| `parsed_command("name", f)` | `fn(&mut self, T) -> CommandResult`, `T: FromArgs` | the same, with the line already parsed |
 | `on_tick(f)` | `fn(&mut self, u64)` | 20 times a second |
 | `every(ticks, f)` | `fn(&mut self)` | once every `ticks` ticks |
 | `every_seconds(n, f)` | `fn(&mut self)` | once every `n` seconds |
@@ -114,7 +115,9 @@ Or copy `target/horizon-mod/<id>.hmod` into `horizon-mods/` next to the game's `
 | `settings(f)` | `fn(&self, &mut Page<Self>)` | builds the mod's page in Options > Mods |
 | `on_screen_closed(f)` | `fn(&mut self)` | the player left the mod's screen |
 
-Handlers are methods (`Self::greet`) or closures without captures (`|m, _| m.ticks += 1`). Registering a command name twice keeps the last handler. A leading `/` in the name is ignored. Timers count ticks since the mod loaded and fire after each full interval; any number can be registered.
+Handlers are methods (`Self::greet`) or closures without captures (`|m, _| m.ticks += 1`). `on_tick`, `on_frame`, `on_chat`, `on_screen_closed` and timers can be registered any number of times; every handler runs, in the order registered, so separate features can keep separate handlers. Registering a command name twice keeps the last handler. A leading `/` in the name is ignored. Timers count ticks since the mod loaded and fire after each full interval.
+
+`game::player()` and `game::clock()` ask the game once per hook call; calling them again in the same handler is free.
 
 Returning `Err` from `init` keeps the mod off and shows the message to the player.
 
@@ -132,15 +135,19 @@ enum Waypoint {
     Note { name: String, #[rest] text: String },
 }
 
-fn waypoint(&mut self, args: Args) -> CommandResult {
-    match args.parse()? {
-        Waypoint::List => Ok(Some(self.list())),
+hooks.parsed_command("wp", Self::waypoint);
+
+fn waypoint(&mut self, command: Waypoint) -> CommandResult {
+    match command {
+        Waypoint::List => reply(self.list()),
         Waypoint::Add { name, x, y, z } => self.add(name, x, y, z),
         Waypoint::Remove { name } => self.remove(&name),
         Waypoint::Note { name, text } => self.note(&name, text),
     }
 }
 ```
+
+`parsed_command` parses the line before calling the handler and answers the player with the error below when it does not fit. With `command`, call `args.parse::<Waypoint>()?` yourself.
 
 | You write | Player types |
 |---|---|
@@ -172,7 +179,7 @@ fn teleport(&mut self, args: Args) -> CommandResult {
     let x: i32 = args.get(0)?;
     let y: i32 = args.get_or(1, 64)?;
     let note = args.rest(2);
-    Ok(Some(format!("Going to {x} {y} ({note})")))
+    reply(format!("Going to {x} {y} ({note})"))
 }
 ```
 
@@ -188,7 +195,7 @@ fn teleport(&mut self, args: Args) -> CommandResult {
 | `parse::<T>()` | the whole line as a `FromArgs` type |
 | `command()` | the command's name |
 
-`CommandResult` is `Result<Option<String>, Error>`: `Ok(Some(text))` is feedback, `Ok(None)` is silent, `Err(e)` is shown in red. `Error` converts from anything printable, so `?` works on parse errors, storage errors and strings: `Err("no such home".into())`.
+`CommandResult` is `Result<Option<String>, Error>`: `reply(text)` (same as `Ok(Some(text))`) is feedback, `no_reply()` (`Ok(None)`) is silent, `Err(e)` is shown in red. `Error` converts from anything printable, so `?` works on parse errors, storage errors and strings: `Err("no such home".into())`.
 
 ## Game state (`game`)
 
@@ -276,7 +283,7 @@ settings.reset()?;
 | A field was removed | it is dropped from the file |
 | The file is broken or has a wrong type | defaults are used, a warning is logged, the file is left for the player to fix |
 
-`Config::load()` uses `config.json`; `Config::load_named("waypoints")` uses `waypoints.json`. `Config` derefs to your struct. `update` and `reset` save immediately; `reload()` reads the file again.
+`Config::load()` uses `config.json`; `Config::load_named("waypoints")` uses `waypoints.json`. `Config` derefs to your struct. `update` and `reset` save immediately and return the storage error, for use with `?` in commands. `edit` saves too but writes a failure to the log instead, for handlers that cannot return an error (buttons, ticks). `reload()` reads the file again.
 
 ## Settings page and screens (`ui`)
 
@@ -294,14 +301,14 @@ impl Mod for Compass {
 
 impl Compass {
     fn settings_page(&self, page: &mut Page<Self>) {
-        page.toggle("Visible", self.settings.visible, |m, on| m.change(|s| s.visible = on))
-            .cycle("Corner", &Corner::ALL, &self.settings.corner, |m, c| m.change(|s| s.corner = c))
-            .button("Reset", |m| { let _ = m.settings.reset(); });
+        page.toggle("Visible", self.settings.visible, |m, on| m.settings.edit(|s| s.visible = on))
+            .cycle("Corner", &Corner::ALL, &self.settings.corner, |m, c| m.settings.edit(|s| s.corner = c))
+            .button("Reset", |m| m.settings.edit(|s| *s = Settings::default()));
     }
 
     fn waypoints(&mut self, _args: Args) -> CommandResult {
         ui::open(Self::waypoint_screen);
-        Ok(None)
+        no_reply()
     }
 
     fn waypoint_screen(&self, page: &mut Page<Self>) {
@@ -321,7 +328,7 @@ impl Compass {
 | `cycle(label, options, current, f)` | `label: current` | the next option |
 | `list(options, selected, f)` | rows to pick from | the picked option |
 
-The settings page appears once the mod loads and is rebuilt when the player opens it. `ui::open(f)` shows a screen over the game (a second call replaces it), `ui::close()` closes it, and `ui::refresh()` rebuilds both after a change made elsewhere, for example in a tick handler. Pages hold at most 64 widgets; texts are cut to 256 characters, lists to 512 rows. `set_title` only applies to screens: the settings page is titled with the mod's name.
+The settings page appears once the mod loads and is rebuilt when the player opens it. `ui::open(f)` shows a screen over the game (a second call replaces it), `ui::close()` closes it. Pages are rebuilt automatically after every click, command and chat line; only a change made in a tick, frame or timer handler needs `ui::refresh()`. Pages hold at most 64 widgets; texts are cut to 256 characters, lists to 512 rows. `set_title` only applies to screens: the settings page is titled with the mod's name.
 
 ## Data (`storage`)
 
