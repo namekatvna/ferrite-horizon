@@ -65,6 +65,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "hello"
+version = "0.1.0"
+dependencies = [
+ "ferrite-api",
+]
+
+[[package]]
 name = "horizon-mod-sdk"
 version = "0.1.0"
 source = "git+https://github.com/horizon-rust/horizon?rev=cba52f4e5d7f99c592a26823fe8727beafe6ebff#cba52f4e5d7f99c592a26823fe8727beafe6ebff"
