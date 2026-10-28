@@ -107,6 +107,8 @@ Read the [modding guide](docs/guide.md) next; [`examples/`](examples) has comple
 | `examples/` | `hello` and `compass` |
 | `docs/` | the guide and the list of features Horizon does not offer yet |
 
+Changes are listed in [CHANGELOG.md](CHANGELOG.md). To work on Ferrite itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 [MIT](LICENSE)

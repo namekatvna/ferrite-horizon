@@ -347,6 +347,8 @@ The binary format is not self-describing: changing a saved struct makes old data
 
 ## Commands as the player (`command`)
 
+The `command` module runs the game's own commands, as if the player typed them. It is not for the mod's commands: those are registered with `hooks.command` and `hooks.parsed_command` (see Commands).
+
 ```rust
 command::run("/time set day");
 command::run_quiet(["/setblock 0 64 0 stone", "/setblock 1 64 0 stone"]);
