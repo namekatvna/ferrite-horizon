@@ -3,7 +3,6 @@ resolver = "3"
 members = [
     "crates/ferrite-api",
     "crates/ferrite-macros",
-    "crates/ferrite-common",
     "crates/cargo-ferrite",
     "examples/hello",
     "examples/compass",
@@ -20,7 +19,6 @@ authors = ["Vadym Morozov"]
 [workspace.dependencies]
 ferrite-api = { path = "crates/ferrite-api", version = "0.0.1" }
 ferrite-macros = { path = "crates/ferrite-macros", version = "0.0.1" }
-ferrite-common = { path = "crates/ferrite-common", version = "0.0.1" }
 postcard = { version = "1", default-features = false, features = ["alloc"] }
 proc-macro2 = "1"
 quote = "1"
