@@ -17,6 +17,7 @@ pub mod game;
 pub mod hud;
 pub mod input;
 pub mod log;
+pub mod server;
 pub mod storage;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod testing;

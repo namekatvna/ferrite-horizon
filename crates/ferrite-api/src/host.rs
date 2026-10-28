@@ -8,6 +8,7 @@ mod wasm {
     use std::cell::{Cell, RefCell};
 
     use crate::__private::sdk::{chat, command, game, hud, input, log, storage, ui};
+    use crate::__private::server_sdk;
     use crate::game::{BlockPos, Clock, Hit, Player, Vec3};
     use crate::hud::{Corner, Line};
     use crate::input::{Clicks, ControlState, Event, HeldItem, ItemUse};
@@ -100,6 +101,57 @@ mod wasm {
     pub(crate) fn forget_snapshot() {
         PLAYER.with(|p| p.borrow_mut().take());
         CLOCK.with(|c| c.set(None));
+        ONLINE.with(|o| o.borrow_mut().take());
+    }
+
+    thread_local! {
+        static ONLINE: RefCell<Option<Vec<crate::server::Player>>> = const { RefCell::new(None) };
+    }
+
+    pub(crate) fn server_players() -> Vec<crate::server::Player> {
+        ONLINE.with(|cached| {
+            cached
+                .borrow_mut()
+                .get_or_insert_with(|| {
+                    server_sdk::players::online()
+                        .into_iter()
+                        .map(crate::__private::player)
+                        .collect()
+                })
+                .clone()
+        })
+    }
+
+    pub(crate) fn server_tell(player: &str, text: &str) -> bool {
+        server_sdk::players::tell(player, text)
+    }
+
+    pub(crate) fn server_broadcast(text: &str) {
+        server_sdk::players::broadcast(text);
+    }
+
+    pub(crate) fn server_get_block(dimension: &str, pos: BlockPos) -> Option<String> {
+        server_sdk::world::get_block(dimension, pos.x, pos.y, pos.z)
+    }
+
+    pub(crate) fn server_get_biome(dimension: &str, pos: BlockPos) -> Option<String> {
+        server_sdk::world::get_biome(dimension, pos.x, pos.y, pos.z)
+    }
+
+    pub(crate) fn server_set_blocks(
+        dimension: &str,
+        changes: &[(BlockPos, String)],
+    ) -> Result<(), String> {
+        let changes: Vec<server_sdk::world::BlockChange> = changes
+            .iter()
+            .map(|(pos, state)| server_sdk::world::BlockChange {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                state: state.clone(),
+            })
+            .collect();
+        server_sdk::world::set_blocks(dimension, &changes)
     }
 
     pub(crate) fn player() -> Option<Player> {

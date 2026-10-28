@@ -10,8 +10,10 @@ use crate::log::Level;
 use crate::ui::{Widget, widget_id};
 
 pub(crate) mod fake;
+mod server;
 
 use fake::{Fake, with};
+pub use server::{ServerWorld, TestServer};
 
 pub const EYE_HEIGHT: f64 = 1.62;
 
@@ -358,10 +360,14 @@ impl<M: Mod> TestGame<M> {
 }
 
 fn boot<M: Mod>() -> Result<(Adapter<M>, Registration), String> {
+    boot_common();
+    Adapter::<M>::init()
+}
+
+fn boot_common() {
     crate::hud::forget_shown();
     crate::ui::forget_state();
     crate::input::forget_state();
-    Adapter::<M>::init()
 }
 
 fn button(widgets: &[Widget], label: &str, place: &str) -> usize {

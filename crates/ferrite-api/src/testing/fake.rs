@@ -1,10 +1,12 @@
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 
 use super::{EYE_HEIGHT, RegisteredKey, Screen, World};
-use crate::game::{Clock, Hit, Player, Vec3};
+use crate::game::{BlockPos, Clock, Hit, Player, Vec3};
 use crate::hud::{Corner, Line, Panel};
 use crate::input::{Clicks, Control, ControlState, Event, HeldItem};
 use crate::log::Level;
+use crate::server::Player as ServerPlayer;
 use crate::ui::Widget;
 
 #[derive(Default)]
@@ -21,6 +23,93 @@ pub(super) struct Fake {
     pub(super) claimed_items: Vec<String>,
     pub(super) scroll_captured: bool,
     pub(super) events: Vec<Event>,
+    pub(super) server: ServerState,
+}
+
+#[derive(Default)]
+pub(super) struct ServerState {
+    pub(super) online: Vec<ServerPlayer>,
+    pub(super) told: Vec<(String, String)>,
+    pub(super) broadcasts: Vec<String>,
+    pub(super) blocks: BTreeMap<(String, BlockPos), String>,
+    pub(super) biome: String,
+    pub(super) pending: Vec<(String, BlockPos, String)>,
+}
+
+pub(crate) fn server_players() -> Vec<ServerPlayer> {
+    with(|f| f.server.online.clone())
+}
+
+pub(crate) fn server_tell(player: &str, text: &str) -> bool {
+    with(|f| {
+        let Some(name) = f
+            .server
+            .online
+            .iter()
+            .find(|p| p.id == player)
+            .map(|p| p.name.clone())
+        else {
+            return false;
+        };
+        f.server.told.push((name, text.to_owned()));
+        true
+    })
+}
+
+pub(crate) fn server_broadcast(text: &str) {
+    with(|f| f.server.broadcasts.push(text.to_owned()));
+}
+
+pub(crate) fn server_get_block(dimension: &str, pos: BlockPos) -> Option<String> {
+    with(|f| {
+        Some(
+            f.server
+                .blocks
+                .get(&(dimension.to_owned(), pos))
+                .cloned()
+                .unwrap_or_else(|| "minecraft:air".to_owned()),
+        )
+    })
+}
+
+pub(crate) fn server_get_biome(_dimension: &str, _pos: BlockPos) -> Option<String> {
+    with(|f| Some(f.server.biome.clone()))
+}
+
+pub(crate) fn server_set_blocks(
+    dimension: &str,
+    changes: &[(BlockPos, String)],
+) -> Result<(), String> {
+    if changes.len() > crate::server::world::MAX_CHANGES_PER_CALL {
+        return Err(format!(
+            "at most {} changes per call",
+            crate::server::world::MAX_CHANGES_PER_CALL
+        ));
+    }
+    if let Some((_, state)) = changes.iter().find(|(_, state)| !valid_state(state)) {
+        return Err(format!("unknown block state {state}"));
+    }
+    with(|f| {
+        f.server.pending.extend(
+            changes
+                .iter()
+                .map(|(pos, state)| (dimension.to_owned(), *pos, state.clone())),
+        )
+    });
+    Ok(())
+}
+
+fn valid_state(state: &str) -> bool {
+    let id = state.split('[').next().unwrap_or(state);
+    let Some((namespace, path)) = id.split_once(':') else {
+        return false;
+    };
+    let ok = |s: &str| {
+        !s.is_empty()
+            && s.bytes()
+                .all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'_' | b'.' | b'-' | b'/'))
+    };
+    ok(namespace) && ok(path) && (state.len() == id.len() || state.ends_with(']'))
 }
 
 pub(crate) fn input_register_key(name: &str, label: &str, key: &str) -> Result<(), String> {

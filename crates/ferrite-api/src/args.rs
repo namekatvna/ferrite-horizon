@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use crate::Error;
+use crate::game::BlockPos;
 
 pub type CommandResult = Result<Option<String>, Error>;
 
@@ -17,6 +18,16 @@ pub trait FromArgs: Sized {
     const USAGE: &'static str;
 
     fn from_args(cursor: &mut ArgCursor<'_>) -> Result<Self, Error>;
+
+    #[doc(hidden)]
+    fn server_arguments() -> Option<Vec<crate::server::ArgumentSpec>> {
+        None
+    }
+
+    #[doc(hidden)]
+    fn from_server(_values: &crate::server::Values<'_>) -> Result<Self, Error> {
+        Err(Error::new("this command has no typed server arguments"))
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -197,6 +208,34 @@ impl<'a> ArgCursor<'a> {
             "" => Ok(None),
             rest => parse_named(rest, name).map(Some),
         }
+    }
+
+    pub fn required_block_pos(&mut self, name: &str) -> Result<BlockPos, Error> {
+        match self.optional_block_pos(name)? {
+            Some(pos) => Ok(pos),
+            None => Err(self.missing_argument(name)),
+        }
+    }
+
+    pub fn optional_block_pos(&mut self, name: &str) -> Result<Option<BlockPos>, Error> {
+        let Some(x) = self.next_word() else {
+            return Ok(None);
+        };
+        let (Some(y), Some(z)) = (self.next_word(), self.next_word()) else {
+            return Err(self.missing_argument(name));
+        };
+        let coordinate = |word: &str| {
+            word.parse::<i32>().map_err(|_| {
+                Error::new(format!(
+                    "Invalid <{name}> `{x} {y} {z}`: expected three whole numbers"
+                ))
+            })
+        };
+        Ok(Some(BlockPos::new(
+            coordinate(x)?,
+            coordinate(y)?,
+            coordinate(z)?,
+        )))
     }
 
     pub fn missing_argument(&self, name: &str) -> Error {

@@ -93,6 +93,32 @@ impl BlockPos {
     pub fn offset(self, dx: i32, dy: i32, dz: i32) -> Self {
         Self::new(self.x + dx, self.y + dy, self.z + dz)
     }
+
+    pub fn cuboid(a: Self, b: Self) -> impl Iterator<Item = Self> {
+        let (min, max) = (
+            Self::new(a.x.min(b.x), a.y.min(b.y), a.z.min(b.z)),
+            Self::new(a.x.max(b.x), a.y.max(b.y), a.z.max(b.z)),
+        );
+        (min.y..=max.y).flat_map(move |y| {
+            (min.z..=max.z).flat_map(move |z| (min.x..=max.x).map(move |x| Self::new(x, y, z)))
+        })
+    }
+
+    pub fn volume(a: Self, b: Self) -> u64 {
+        let side = |p: i32, q: i32| u64::from(p.abs_diff(q)) + 1;
+        side(a.x, b.x) * side(a.y, b.y) * side(a.z, b.z)
+    }
+
+    pub fn neighbors(self) -> [Self; 6] {
+        [
+            self.offset(1, 0, 0),
+            self.offset(-1, 0, 0),
+            self.offset(0, 1, 0),
+            self.offset(0, -1, 0),
+            self.offset(0, 0, 1),
+            self.offset(0, 0, -1),
+        ]
+    }
 }
 
 impl fmt::Display for BlockPos {
