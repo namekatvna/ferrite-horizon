@@ -8,9 +8,12 @@ pub mod __private;
 
 pub mod chat;
 pub mod command;
+#[cfg(feature = "serde")]
+pub mod config;
 pub mod game;
 pub mod hud;
 pub mod log;
+pub mod storage;
 
 pub use args::{Args, CommandResult};
 pub use error::Error;
@@ -20,9 +23,11 @@ pub use mod_trait::Mod;
 pub const API_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod prelude {
+    #[cfg(feature = "serde")]
+    pub use crate::config::Config;
     pub use crate::hud::{Color, Corner, Panel};
     pub use crate::{
-        Args, CommandResult, Error, Hooks, Mod, chat, command, export_mod, game, hud, log,
+        Args, CommandResult, Error, Hooks, Mod, chat, command, export_mod, game, hud, log, storage,
     };
 }
 
