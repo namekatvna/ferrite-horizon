@@ -1,7 +1,7 @@
 use ferrite_api::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Settings)]
 struct Settings {
     visible: bool,
     corner: Corner,
@@ -45,16 +45,8 @@ impl Mod for Compass {
 
 impl Compass {
     fn settings_page(&self, page: &mut Page<Self>) {
-        page.toggle("Visible", self.settings.visible, |m, on| {
-            m.settings.edit(|s| s.visible = on)
-        })
-        .cycle(
-            "Corner",
-            &Corner::ALL,
-            &self.settings.corner,
-            |m, corner| m.settings.edit(|s| s.corner = corner),
-        )
-        .button("Reset", |m| m.settings.edit(|s| *s = Settings::default()));
+        page.config(&self.settings, |m| &mut m.settings)
+            .button("Reset", |m| m.settings.edit(|s| *s = Settings::default()));
     }
 
     fn tick(&mut self, _tick: u64) {
@@ -144,7 +136,7 @@ mod tests {
                     label: "Visible: ON".into()
                 },
                 ui::Widget::Button {
-                    label: "Corner: top-left".into()
+                    label: "Corner: Top left".into()
                 },
                 ui::Widget::Button {
                     label: "Reset".into()
@@ -177,7 +169,7 @@ mod tests {
             Ok(Some("Compass moved to bottom-right".into()))
         );
         assert!(game.settings().contains(&ui::Widget::Button {
-            label: "Corner: bottom-right".into()
+            label: "Corner: Bottom right".into()
         }));
 
         game.command("day").unwrap();

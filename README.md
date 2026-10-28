@@ -14,7 +14,7 @@ Ferrite is unofficial and not affiliated with the Horizon project, Mojang or Mic
 use ferrite_api::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, Settings)]
 struct Settings {
     visible: bool,
     corner: Corner,
@@ -37,7 +37,7 @@ impl Mod for Hud {
             .on_tick(Self::draw)
             .parsed_command("compass", Self::compass)
             .settings(|hud, page| {
-                page.toggle("Visible", hud.settings.visible, |m, on| m.settings.edit(|s| s.visible = on));
+                page.config(&hud.settings, |m| &mut m.settings);
             });
         Ok(Self { settings: Config::load() })
     }
@@ -75,7 +75,7 @@ export_mod!(Hud);
 | **Commands** | `#[derive(FromArgs)]` turns an enum into a command with generated usage and error messages |
 | **HUD** | text panels in a corner; unchanged panels are not resent to the game |
 | **Settings** | `Config<T>`: JSON settings that survive new and removed fields and broken files |
-| **UI** | a settings page in Options > Mods and the mod's own screens, with handlers bound to widgets |
+| **UI** | a settings page in Options > Mods and the mod's own screens, with handlers bound to widgets; `#[derive(Settings)]` builds the page from the config struct |
 | **Storage** | typed key/value data per mod |
 | **Testing** | `TestGame` runs the mod in `cargo test` against a fake game; `cargo ferrite test` in Horizon's sandbox |
 | **Tooling** | `cargo ferrite new / build / test / run / check / doctor` |

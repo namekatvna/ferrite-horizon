@@ -302,7 +302,7 @@ impl Mod for Compass {
 impl Compass {
     fn settings_page(&self, page: &mut Page<Self>) {
         page.toggle("Visible", self.settings.visible, |m, on| m.settings.edit(|s| s.visible = on))
-            .cycle("Corner", &Corner::ALL, &self.settings.corner, |m, c| m.settings.edit(|s| s.corner = c))
+            .choice("Corner", &self.settings.corner, |m, c| m.settings.edit(|s| s.corner = c))
             .button("Reset", |m| m.settings.edit(|s| *s = Settings::default()));
     }
 
@@ -326,9 +326,58 @@ impl Compass {
 | `button(label, f)` | a button | `fn(&mut self)` |
 | `toggle(label, value, f)` | `label: ON/OFF` | the new value |
 | `cycle(label, options, current, f)` | `label: current` | the next option |
+| `choice(label, current, f)` | `label: Current` for a `Choice` type | the next choice |
 | `list(options, selected, f)` | rows to pick from | the picked option |
+| `config(&self.settings, \|m\| &mut m.settings)` | one widget per field of a `#[derive(Settings)]` config | saves the change |
+| `fields(&self.options, \|m\| &mut m.options)` | the same for a struct kept only in memory | changes it |
+
+Handlers are closures or methods; they may capture values.
 
 The settings page appears once the mod loads and is rebuilt when the player opens it. `ui::open(f)` shows a screen over the game (a second call replaces it), `ui::close()` closes it. Pages are rebuilt automatically after every click, command and chat line; only a change made in a tick, frame or timer handler needs `ui::refresh()`. Pages hold at most 64 widgets; texts are cut to 256 characters, lists to 512 rows. `set_title` only applies to screens: the settings page is titled with the mod's name.
+
+### A settings page from the config (`#[derive(Settings)]`)
+
+Instead of a widget per field, derive `Settings` on the config struct and show it with one call:
+
+```rust
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize, Choice)]
+enum Speed {
+    Slow,
+    VeryFast,
+    #[choice(label = "Ludicrous!")]
+    Ludicrous,
+}
+
+#[derive(Serialize, Deserialize, Settings)]
+struct Settings {
+    show_coords: bool,
+    corner: Corner,
+    speed: Speed,
+    #[setting(range = 4..=64, step = 4)]
+    radius: u32,
+    #[setting(options = ["red", "green", "blue"], label = "Marker color")]
+    color: String,
+    #[setting(skip)]
+    homes: Vec<Home>,
+}
+
+fn settings_page(&self, page: &mut Page<Self>) {
+    page.config(&self.settings, |m| &mut m.settings)
+        .button("Reset", |m| m.settings.edit(|s| *s = Settings::default()));
+}
+```
+
+This shows `Show coords: ON`, `Corner: Top left`, `Speed: Slow`, `Radius: 16` and `Marker color: red`. A click moves to the next value, saves the config and updates the page; after the last value it starts over.
+
+| Field | Widget |
+|---|---|
+| `bool` | on/off button |
+| a `Choice` type: `Corner`, or an enum with `#[derive(Choice)]` | the enum's values, labelled `TopLeft` → `Top left` |
+| `#[setting(options = [...])]` | the listed values; string literals become the field's type |
+| `#[setting(range = a..=b, step = n)]` | the numbers in the range, `step` defaults to 1 |
+| `#[setting(skip)]` | nothing |
+
+`#[setting(label = "...")]` replaces the label made from the field name (`show_coords` → `Show coords`), and `#[choice(label = "...")]` the one made from a variant name. `Choice` needs `Clone` and `PartialEq`. A field of another type without `options`, `range` or `skip` is a compile error that points at the field and says which of these to add.
 
 ## Data (`storage`)
 
