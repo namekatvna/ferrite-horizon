@@ -1,23 +1,34 @@
+mod new;
+
+use std::process::ExitCode;
+
 const USAGE: &str = "\
 Usage: cargo ferrite <command>
 
 Commands:
-  new <name>   Create a mod project (not implemented yet)
-  build        Build the mod as .hmod (not implemented yet)
-  run          Build and start Horizon with the mod (not implemented yet)
-  test         Run mod test scripts (not implemented yet)";
+  new <path>     Create a mod project [--name <name>] [--ferrite-path <dir>]";
 
-fn main() {
-    let args: Vec<String> = std::env::args()
-        .skip(1)
-        .skip_while(|a| a == "ferrite")
-        .collect();
-
-    match args.first().map(String::as_str) {
-        None | Some("help" | "-h" | "--help") => println!("{USAGE}"),
-        Some(cmd) => {
-            eprintln!("cargo ferrite: unknown or unimplemented command `{cmd}`\n\n{USAGE}");
-            std::process::exit(2);
-        }
+fn main() -> ExitCode {
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "ferrite") {
+        args.remove(0);
     }
+
+    let result = match args.first().map(String::as_str) {
+        None | Some("help" | "-h" | "--help") => {
+            println!("{USAGE}");
+            Ok(ExitCode::SUCCESS)
+        }
+        Some("new") => new::run(&args[1..]).map(|()| ExitCode::SUCCESS),
+        Some(cmd) => Err(format!("unknown command `{cmd}`\n\n{USAGE}")),
+    };
+    result.unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        ExitCode::FAILURE
+    })
+}
+
+fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    let i = args.iter().position(|a| a == name)?;
+    args.get(i + 1).map(String::as_str)
 }

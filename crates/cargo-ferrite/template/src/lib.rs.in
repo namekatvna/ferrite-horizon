@@ -1,0 +1,25 @@
+use ferrite_api::prelude::*;
+
+struct %type% {
+    ticks: u64,
+}
+
+impl Mod for %type% {
+    fn init(hooks: &mut Hooks<Self>) -> Result<Self, Error> {
+        hooks
+            .command("hello", Self::hello)
+            .on_tick(|state, _| state.ticks += 1);
+        log::info("%id%: loaded");
+        Ok(Self { ticks: 0 })
+    }
+}
+
+impl %type% {
+    fn hello(&mut self, args: Args) -> CommandResult {
+        let who = args.word(0).unwrap_or("world");
+        chat::show(format!("Hello, {who}!"));
+        Ok(Some(format!("{} ticks since load", self.ticks)))
+    }
+}
+
+export_mod!(%type%);
