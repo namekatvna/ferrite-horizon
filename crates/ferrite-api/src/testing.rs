@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
@@ -8,6 +7,10 @@ use crate::game::{Clock, Dimension, Hit, Player, Vec3};
 use crate::hud::Panel;
 use crate::log::Level;
 use crate::ui::{Widget, widget_id};
+
+pub(crate) mod fake;
+
+use fake::{Fake, with};
 
 pub const EYE_HEIGHT: f64 = 1.62;
 
@@ -63,125 +66,6 @@ pub fn default_player() -> Player {
 pub struct Screen {
     pub title: String,
     pub widgets: Vec<Widget>,
-}
-
-#[derive(Default)]
-struct Fake {
-    world: World,
-    log: Vec<(Level, String)>,
-    chat: Vec<String>,
-    commands: Vec<String>,
-    quiet_commands: Vec<String>,
-    panel: Option<Panel>,
-    settings: Vec<Widget>,
-    screen: Option<Screen>,
-}
-
-thread_local! {
-    static FAKE: RefCell<Fake> = RefCell::new(Fake::default());
-}
-
-fn with<R>(f: impl FnOnce(&mut Fake) -> R) -> R {
-    FAKE.with(|fake| f(&mut fake.borrow_mut()))
-}
-
-pub(crate) mod fake {
-    use super::{EYE_HEIGHT, Screen, with};
-    use crate::game::{Clock, Hit, Player, Vec3};
-    use crate::hud::{Corner, Line, Panel};
-    use crate::log::Level;
-    use crate::ui::Widget;
-
-    pub(crate) fn log(level: Level, message: &str) {
-        with(|f| f.log.push((level, message.to_owned())));
-    }
-
-    pub(crate) fn forget_snapshot() {}
-
-    pub(crate) fn chat_show(text: &str) {
-        with(|f| f.chat.push(text.to_owned()));
-    }
-
-    pub(crate) fn command_run(line: &str) {
-        with(|f| f.commands.push(line.to_owned()));
-    }
-
-    pub(crate) fn command_run_quiet(lines: &[String]) {
-        with(|f| f.quiet_commands.extend_from_slice(lines));
-    }
-
-    pub(crate) fn player() -> Option<Player> {
-        with(|f| f.world.player.clone())
-    }
-
-    pub(crate) fn clock() -> Option<Clock> {
-        with(|f| f.world.clock)
-    }
-
-    pub(crate) fn raycast(distance: f32) -> Option<Hit> {
-        with(|f| {
-            let eye = f.world.player.as_ref()?.position + Vec3::new(0.0, EYE_HEIGHT, 0.0);
-            let hit = f.world.hit.as_ref()?;
-            (eye.distance(hit.point) <= f64::from(distance)).then(|| hit.clone())
-        })
-    }
-
-    pub(crate) fn hud_set_panel(corner: Corner, lines: &[Line]) {
-        let mut panel = Panel::new(corner);
-        for line in lines {
-            panel.push(line.clone());
-        }
-        with(|f| f.panel = Some(panel));
-    }
-
-    pub(crate) fn hud_clear() {
-        with(|f| f.panel = None);
-    }
-
-    pub(crate) fn storage_get(key: &str) -> Option<Vec<u8>> {
-        with(|f| f.world.storage.get(key).cloned())
-    }
-
-    pub(crate) fn storage_set(key: &str, value: &[u8]) -> Result<(), String> {
-        with(|f| {
-            let others: usize = f
-                .world
-                .storage
-                .iter()
-                .filter(|(k, _)| *k != key)
-                .map(|(_, v)| v.len())
-                .sum();
-            if f.world
-                .storage_quota
-                .is_some_and(|quota| others + value.len() > quota)
-            {
-                return Err("over quota".to_owned());
-            }
-            f.world.storage.insert(key.to_owned(), value.to_vec());
-            Ok(())
-        })
-    }
-
-    pub(crate) fn storage_delete(key: &str) {
-        with(|f| f.world.storage.remove(key));
-    }
-
-    pub(crate) fn ui_set_settings(widgets: &[Widget]) {
-        with(|f| f.settings = widgets.to_vec());
-    }
-
-    pub(crate) fn ui_open_screen(title: &str, widgets: &[Widget]) {
-        with(|f| {
-            f.screen = Some(Screen {
-                title: title.to_owned(),
-                widgets: widgets.to_vec(),
-            })
-        });
-    }
-
-    pub(crate) fn ui_close_screen() {
-        with(|f| f.screen = None);
-    }
 }
 
 pub struct TestGame<M: Mod> {
