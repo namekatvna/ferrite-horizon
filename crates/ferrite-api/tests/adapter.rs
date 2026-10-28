@@ -62,7 +62,7 @@ impl Mod for Silent {
 export_mod!(Counter);
 
 fn start<M: Mod>() -> (Adapter<M>, sdk::Registration) {
-    <Adapter<M> as sdk::Mod>::init().unwrap()
+    Adapter::<M>::init().unwrap()
 }
 
 #[test]
@@ -76,10 +76,10 @@ fn handlers_become_registration() {
 fn events_reach_their_handlers() {
     let (mut adapter, _) = start::<Counter>();
     for tick in 0..3 {
-        sdk::Mod::tick(&mut adapter, tick);
+        adapter.tick(tick);
     }
-    sdk::Mod::frame(&mut adapter, 0.016);
-    sdk::Mod::chat(&mut adapter, "hi");
+    adapter.frame(0.016);
+    adapter.chat("hi");
 
     assert_eq!(adapter.inner().ticks, 3);
     assert_eq!(adapter.inner().frames, 1);
@@ -90,28 +90,22 @@ fn events_reach_their_handlers() {
 fn commands_dispatch_by_name_with_parsed_args() {
     let (mut adapter, _) = start::<Counter>();
 
-    assert_eq!(sdk::Mod::command(&mut adapter, "add", " 40 "), Ok(None));
+    assert_eq!(adapter.command("add", " 40 "), Ok(None));
+    assert_eq!(adapter.command("count", ""), Ok(Some("40".into())));
     assert_eq!(
-        sdk::Mod::command(&mut adapter, "count", ""),
-        Ok(Some("40".into()))
-    );
-    assert_eq!(
-        sdk::Mod::command(&mut adapter, "add", "many"),
+        adapter.command("add", "many"),
         Err("Invalid argument #1 `many`: invalid digit found in string".into())
     );
+    assert_eq!(adapter.command("count", "x"), Err("unexpected `x`".into()));
     assert_eq!(
-        sdk::Mod::command(&mut adapter, "count", "x"),
-        Err("unexpected `x`".into())
-    );
-    assert_eq!(
-        sdk::Mod::command(&mut adapter, "nope", ""),
+        adapter.command("nope", ""),
         Err("Unknown command /nope".into())
     );
 }
 
 #[test]
 fn init_error_is_passed_through() {
-    let err = <Adapter<Refuses> as sdk::Mod>::init().err();
+    let err = Adapter::<Refuses>::init().err();
     assert_eq!(err.as_deref(), Some("missing config"));
 }
 

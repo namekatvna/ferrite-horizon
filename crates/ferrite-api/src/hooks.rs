@@ -62,19 +62,12 @@ impl<M> Hooks<M> {
     }
 
     pub(crate) fn registration(&self) -> Registration {
-        let mut registration = self
-            .commands()
-            .fold(Registration::new(), |r, name| r.command(name));
-        if self.tick.is_some() {
-            registration = registration.on_tick();
+        Registration {
+            commands: self.commands().map(str::to_owned).collect(),
+            tick: self.tick.is_some(),
+            frame: self.frame.is_some(),
+            chat: self.chat.is_some(),
         }
-        if self.frame.is_some() {
-            registration = registration.on_frame();
-        }
-        if self.chat.is_some() {
-            registration = registration.on_chat();
-        }
-        registration
     }
 }
 

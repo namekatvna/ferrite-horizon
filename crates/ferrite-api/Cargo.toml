@@ -14,10 +14,10 @@ serde = ["dep:serde", "dep:serde_json", "dep:postcard"]
 
 [dependencies]
 ferrite-macros.workspace = true
-horizon-mod-sdk.workspace = true
 postcard = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }
+wit-bindgen.workspace = true
 
 [dev-dependencies]
 serde = { workspace = true, features = ["derive"] }

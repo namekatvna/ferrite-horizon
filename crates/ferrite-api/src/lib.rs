@@ -52,29 +52,29 @@ macro_rules! export_mod {
 
             struct Export;
 
-            impl sdk::__Guest for Export {
+            impl sdk::Guest for Export {
                 fn init() -> Result<sdk::Registration, String> {
-                    let (m, registration) = <Adapter<$t> as sdk::Mod>::init()?;
+                    let (m, registration) = Adapter::<$t>::init()?;
                     STATE.with(|s| *s.borrow_mut() = Some(m));
                     Ok(registration)
                 }
                 fn tick(tick: u64) {
-                    with(|m| sdk::Mod::tick(m, tick))
+                    with(|m| m.tick(tick))
                 }
                 fn frame(seconds: f32) {
-                    with(|m| sdk::Mod::frame(m, seconds))
+                    with(|m| m.frame(seconds))
                 }
                 fn command(name: String, args: String) -> Result<Option<String>, String> {
                     let mut out = Err("The mod is not running".to_string());
-                    with(|m| out = sdk::Mod::command(m, &name, &args));
+                    with(|m| out = m.command(&name, &args));
                     out
                 }
                 fn chat(text: String) {
-                    with(|m| sdk::Mod::chat(m, &text))
+                    with(|m| m.chat(&text))
                 }
             }
 
-            impl sdk::__UiEventsGuest for Export {
+            impl sdk::UiEventsGuest for Export {
                 fn select(_id: u32, _row: u32) {}
                 fn closed() {}
                 fn settings_opened() {}
@@ -84,8 +84,8 @@ macro_rules! export_mod {
             $crate::__private::sdk::__export_horizon_mod!(Export with_types_in $crate::__private::sdk);
             #[cfg(not(target_arch = "wasm32"))]
             let _ = (
-                <Export as sdk::__Guest>::init,
-                <Export as sdk::__UiEventsGuest>::select,
+                <Export as sdk::Guest>::init,
+                <Export as sdk::UiEventsGuest>::select,
             );
         };
     };
