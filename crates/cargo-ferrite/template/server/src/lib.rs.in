@@ -1,0 +1,56 @@
+use ferrite_api::server::prelude::*;
+
+#[derive(FromArgs)]
+struct Hello {
+    who: Option<Player>,
+}
+
+#[derive(Default)]
+struct %type% {
+    greeted: u32,
+}
+
+impl ServerMod for %type% {
+    fn init(hooks: &mut ServerHooks<Self>) -> Result<Self, Error> {
+        hooks
+            .parsed_command("hello", Self::hello)
+            .on_join(|_, player| {
+                player.tell(format!("Welcome, {}!", player.name));
+            });
+        log::info("%id%: loaded");
+        Ok(Self::default())
+    }
+}
+
+impl %type% {
+    fn hello(&mut self, player: &Player, hello: Hello) -> CommandResult {
+        let who = hello.who.unwrap_or_else(|| player.clone());
+        who.tell(format!("Hello from {}!", player.name));
+        self.greeted += 1;
+        reply(format!("Greeted {} times", self.greeted))
+    }
+}
+
+export_server_mod!(%type%);
+
+#[cfg(test)]
+mod tests {
+    use ferrite_api::testing::TestServer;
+
+    use super::*;
+
+    #[test]
+    fn hello_greets_another_player() {
+        let mut server = TestServer::<%type%>::start();
+        server.join("Alex").join("Steve");
+        server.take_told();
+        assert_eq!(
+            server.command("Alex", "hello steve"),
+            Ok(Some("Greeted 1 times".into()))
+        );
+        assert_eq!(
+            server.take_told(),
+            [("Steve".to_owned(), "Hello from Alex!".to_owned())]
+        );
+    }
+}

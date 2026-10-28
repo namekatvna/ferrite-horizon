@@ -1,0 +1,14 @@
+[[step]]
+join = "Alex"
+expect.commands = ["hello"]
+expect.told = ["Alex: Welcome, Alex!"]
+
+[[step]]
+join = "Steve"
+expect.told = ["Steve: Welcome, Steve!"]
+
+[[step]]
+as = "Alex"
+command = "hello steve"
+expect.feedback = "Greeted 1 times"
+expect.told = ["Steve: Hello from Alex!"]

@@ -31,3 +31,5 @@ wit-bindgen = { version = "0.60.0", default-features = false, features = ["macro
 [profile.release]
 opt-level = "s"
 lto = true
+codegen-units = 1
+strip = true

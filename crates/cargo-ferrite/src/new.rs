@@ -2,9 +2,10 @@ use std::path::{Path, PathBuf};
 
 use crate::flag;
 
-const USAGE: &str = "cargo ferrite new <path> [--name <name>] [--ferrite-path <dir>]";
+const USAGE: &str = "cargo ferrite new <path> [--server] [--name <name>] [--ferrite-path <dir>]";
 const FERRITE_GIT: &str = "https://github.com/namekatvna/ferrite-horizon";
-const RELEASE_PROFILE: &str = "\n[profile.release]\nopt-level = \"s\"\nlto = true\n";
+const RELEASE_PROFILE: &str =
+    "\n[profile.release]\nopt-level = \"s\"\nlto = true\ncodegen-units = 1\nstrip = true\n";
 
 const TEMPLATE: [(&str, &str); 5] = [
     ("Cargo.toml", include_str!("../template/Cargo.toml.in")),
@@ -20,6 +21,29 @@ const TEMPLATE: [(&str, &str); 5] = [
     (".gitignore", include_str!("../template/gitignore")),
 ];
 
+const SERVER_TEMPLATE: [(&str, &str); 5] = [
+    ("Cargo.toml", include_str!("../template/Cargo.toml.in")),
+    (
+        "horizon-mod.toml",
+        include_str!("../template/server/horizon-mod.toml"),
+    ),
+    (
+        "src/lib.rs",
+        include_str!("../template/server/src/lib.rs.in"),
+    ),
+    (
+        "tests/hello.toml",
+        include_str!("../template/server/tests/hello.toml"),
+    ),
+    (".gitignore", include_str!("../template/gitignore")),
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    Client,
+    Server,
+}
+
 #[derive(Debug)]
 pub struct Created {
     pub id: String,
@@ -29,8 +53,17 @@ pub struct Created {
 pub fn run(args: &[String]) -> Result<(), String> {
     let path = args.first().filter(|a| !a.starts_with("--")).ok_or(USAGE)?;
     let ferrite_path = flag(args, "--ferrite-path").map(Path::new);
-    let created = create(Path::new(path), flag(args, "--name"), ferrite_path)?;
-    println!("Created {path} (mod id {})", created.id);
+    let side = if args.iter().any(|a| a == "--server") {
+        Side::Server
+    } else {
+        Side::Client
+    };
+    let created = create(Path::new(path), flag(args, "--name"), ferrite_path, side)?;
+    let kind = match side {
+        Side::Client => "client",
+        Side::Server => "server",
+    };
+    println!("Created {path} ({kind} mod, id {})", created.id);
     if let Some(manifest) = created.unlisted_in {
         println!(
             "Note: {} is a workspace; add this mod to its members",
@@ -45,6 +78,7 @@ pub fn create(
     dir: &Path,
     name: Option<&str>,
     ferrite_path: Option<&Path>,
+    side: Side,
 ) -> Result<Created, String> {
     if dir.exists() {
         return Err(format!("{} already exists", dir.display()));
@@ -80,7 +114,11 @@ pub fn create(
             .replace("%profile%", profile)
     };
 
-    for (file, text) in TEMPLATE {
+    let template = match side {
+        Side::Client => TEMPLATE,
+        Side::Server => SERVER_TEMPLATE,
+    };
+    for (file, text) in template {
         let to = dir.join(file);
         if let Some(parent) = to.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -189,14 +227,14 @@ mod tests {
     fn standalone_mod_uses_git_and_its_own_release_profile() {
         let root = temp("standalone");
         let dir = root.join("My-Mod");
-        let created = create(&dir, None, None).unwrap();
+        let created = create(&dir, None, None, Side::Client).unwrap();
         assert_eq!(created.id, "my_mod");
         assert!(created.unlisted_in.is_none());
 
         let cargo = read(&dir, "Cargo.toml");
         assert!(cargo.contains("name = \"my-mod\""));
         assert!(cargo.contains(&format!("ferrite-api = {{ git = \"{FERRITE_GIT}\" }}")));
-        assert!(cargo.ends_with("lto = true\n"));
+        assert!(cargo.ends_with(RELEASE_PROFILE));
 
         let manifest = read(&dir, "horizon-mod.toml");
         assert!(manifest.contains("id = \"my_mod\"\nname = \"My Mod\"\n"));
@@ -210,7 +248,7 @@ mod tests {
         );
 
         assert!(
-            create(&dir, None, None)
+            create(&dir, None, None, Side::Client)
                 .unwrap_err()
                 .contains("already exists")
         );
@@ -226,7 +264,13 @@ mod tests {
         )
         .unwrap();
 
-        let listed = create(&root.join("mods/listed"), Some("Listed \"One\""), None).unwrap();
+        let listed = create(
+            &root.join("mods/listed"),
+            Some("Listed \"One\""),
+            None,
+            Side::Client,
+        )
+        .unwrap();
         assert!(listed.unlisted_in.is_none());
         let cargo = read(&root.join("mods/listed"), "Cargo.toml");
         assert!(cargo.ends_with("[dependencies]\nferrite-api.workspace = true\n"));
@@ -235,7 +279,7 @@ mod tests {
                 .contains(r#"name = "Listed \"One\"""#)
         );
 
-        let unlisted = create(&root.join("mods/other"), None, None).unwrap();
+        let unlisted = create(&root.join("mods/other"), None, None, Side::Client).unwrap();
         assert_eq!(
             unlisted.unlisted_in,
             Some(std::path::absolute(root.join("Cargo.toml")).unwrap())
@@ -247,7 +291,7 @@ mod tests {
     fn ferrite_path_points_at_the_api_crate() {
         let root = temp("path");
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        create(&root.join("local"), None, Some(&repo)).unwrap();
+        create(&root.join("local"), None, Some(&repo), Side::Client).unwrap();
         let cargo = read(&root.join("local"), "Cargo.toml");
         assert!(
             cargo.contains("ferrite-api = { path = \"")
@@ -255,7 +299,25 @@ mod tests {
         );
         assert!(!cargo.contains('\\'));
 
-        assert!(create(&root.join("bad"), None, Some(&root)).is_err());
+        assert!(create(&root.join("bad"), None, Some(&root), Side::Client).is_err());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn server_mods_get_the_server_template() {
+        let root = temp("server");
+        let dir = root.join("welcome-bot");
+        create(&dir, None, None, Side::Server).unwrap();
+        let manifest = read(&dir, "horizon-mod.toml");
+        assert!(manifest.contains("api = \"0.3\"\nside = \"server\""));
+        let lib = read(&dir, "src/lib.rs");
+        assert!(lib.contains("impl ServerMod for WelcomeBot"));
+        assert!(lib.contains("export_server_mod!(WelcomeBot);"));
+        assert!(
+            !SERVER_TEMPLATE
+                .iter()
+                .any(|(file, _)| read(&dir, file).contains('%'))
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 
