@@ -1,0 +1,53 @@
+player = { x = 0.0, y = 70.0, z = 0.0, yaw = 0.0 }
+clock = { day-time = 0 }
+
+[[step]]
+command = "compass corner bottom_right"
+expect.feedback = "Compass moved to bottom-right"
+
+[[step]]
+ticks = 1
+expect.corner = "bottom-right"
+expect.panel = ["XYZ 0 70 0", "Facing South", "Overworld 06:00"]
+
+[[step]]
+reload = true
+ticks = 1
+expect.corner = "bottom-right"
+
+[[step]]
+command = "compass"
+expect.feedback = "Compass off"
+
+[[step]]
+ticks = 1
+expect.panel = []
+
+[[step]]
+reload = true
+ticks = 1
+expect.panel = []
+
+[[step]]
+command = "compass reset"
+expect.feedback = "Compass settings reset"
+
+[[step]]
+ticks = 1
+expect.corner = "top-left"
+
+[[step]]
+command = "compass corner middle"
+expect.error = "Invalid argument #2 `middle`: expected top-left, top-right, bottom-left or bottom-right"
+
+[[step]]
+command = "compass corner"
+expect.error = "Missing argument #2"
+
+[[step]]
+command = "compass spin"
+expect.error = "Unknown option `spin`: use toggle, corner or reset"
+
+[[step]]
+command = "day"
+expect.chat = ["Good morning!"]

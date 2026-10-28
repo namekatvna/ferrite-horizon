@@ -1,0 +1,21 @@
+player = { x = -0.5, y = 64.2, z = 10.9, yaw = 180.0, dimension = "minecraft:overworld" }
+clock = { day-time = 6500 }
+
+[[step]]
+expect.commands = ["compass", "day"]
+
+[[step]]
+ticks = 1
+expect.panel = ["XYZ -1 64 10", "Facing North", "Overworld 12:30"]
+expect.corner = "top-left"
+
+[[step]]
+player = { x = 100.0, yaw = -90.0, dimension = "minecraft:the_nether" }
+clock = { day-time = 42000 }
+ticks = 1
+expect.panel = ["XYZ 100 64 10", "Facing East", "Nether 00:00"]
+
+[[step]]
+title-screen = true
+ticks = 1
+expect.panel = []

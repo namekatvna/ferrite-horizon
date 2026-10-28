@@ -1,0 +1,8 @@
+id = "compass"
+name = "Compass"
+version = "0.1.0"
+description = "Ferrite showcase: a HUD with position, facing and time. /compass toggle|corner <corner>|reset, /day."
+authors = ["namekatvna"]
+api = "0.1"
+side = "client"
+capabilities = ["game-read", "hud", "storage", "command", "chat"]

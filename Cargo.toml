@@ -6,6 +6,7 @@ members = [
     "crates/ferrite-common",
     "crates/cargo-ferrite",
     "examples/hello",
+    "examples/compass",
 ]
 
 [workspace.package]
