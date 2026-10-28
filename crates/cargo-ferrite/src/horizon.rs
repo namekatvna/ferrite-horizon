@@ -3,7 +3,7 @@ use std::process::{Command, ExitCode, Stdio};
 
 const TOOL: &str = "cargo-horizon-mod";
 const TARGET: &str = "wasm32-unknown-unknown";
-const UPSTREAM: &str = include_str!("../../ferrite-api/wit/UPSTREAM");
+const HORIZON_REV: &str = "cba52f4e5d7f99c592a26823fe8727beafe6ebff";
 
 pub fn delegate(args: &[String]) -> Result<ExitCode, String> {
     match Command::new(TOOL).arg("horizon-mod").args(args).status() {
@@ -38,10 +38,7 @@ pub fn doctor() -> ExitCode {
         }
     }
     if ready {
-        println!(
-            "Ready to build Ferrite mods (Horizon API rev {}).",
-            upstream_rev()
-        );
+        println!("Ready to build Ferrite mods (Horizon API rev {HORIZON_REV}).");
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
@@ -68,18 +65,9 @@ fn tool_installed() -> bool {
         .is_ok()
 }
 
-fn upstream_rev() -> &'static str {
-    UPSTREAM
-        .split("/tree/")
-        .nth(1)
-        .and_then(|rest| rest.split('/').next())
-        .unwrap_or("unknown")
-}
-
 fn install_command() -> String {
     format!(
-        "cargo install --git https://github.com/horizon-rust/horizon --rev {} {TOOL}",
-        upstream_rev()
+        "cargo install --git https://github.com/horizon-rust/horizon --rev {HORIZON_REV} {TOOL}"
     )
 }
 
@@ -89,7 +77,15 @@ mod tests {
 
     #[test]
     fn install_pins_the_vendored_wit_revision() {
-        assert_eq!(upstream_rev().len(), 40);
-        assert!(install_command().contains(&format!("--rev {} {TOOL}", upstream_rev())));
+        let upstream = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../ferrite-api/wit/UPSTREAM"
+        ))
+        .unwrap();
+        assert!(
+            upstream.contains(&format!("/tree/{HORIZON_REV}/")),
+            "update HORIZON_REV to the revision in ferrite-api/wit/UPSTREAM: {upstream}"
+        );
+        assert!(install_command().contains(&format!("--rev {HORIZON_REV} {TOOL}")));
     }
 }
