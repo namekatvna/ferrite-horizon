@@ -21,6 +21,9 @@ ferrite-api = { path = "crates/ferrite-api", version = "0.0.1" }
 ferrite-macros = { path = "crates/ferrite-macros", version = "0.0.1" }
 ferrite-common = { path = "crates/ferrite-common", version = "0.0.1" }
 horizon-mod-sdk = { git = "https://github.com/horizon-rust/horizon", rev = "cba52f4e5d7f99c592a26823fe8727beafe6ebff" }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+serde = "1"
+serde_json = "1"
 
 [profile.release]
 opt-level = "s"
