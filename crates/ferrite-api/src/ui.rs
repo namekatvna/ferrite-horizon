@@ -1,9 +1,10 @@
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::fmt::Display;
+use std::rc::Rc;
 
 use crate::host;
-use crate::hud::Color;
+use crate::hud::{Color, Corner};
 
 pub const MAX_WIDGETS: usize = 64;
 pub const MAX_TEXT_CHARS: usize = 256;
@@ -86,7 +87,11 @@ impl<M: 'static> Page<M> {
         )
     }
 
-    pub fn button(&mut self, label: impl Into<String>, on_click: fn(&mut M)) -> &mut Self {
+    pub fn button(
+        &mut self,
+        label: impl Into<String>,
+        on_click: impl Fn(&mut M) + 'static,
+    ) -> &mut Self {
         self.push(
             Widget::Button {
                 label: clip(label.into()),
@@ -99,7 +104,7 @@ impl<M: 'static> Page<M> {
         &mut self,
         label: impl Display,
         value: bool,
-        on_change: fn(&mut M, bool),
+        on_change: impl Fn(&mut M, bool) + 'static,
     ) -> &mut Self {
         let shown = if value { "ON" } else { "OFF" };
         self.push(
@@ -115,30 +120,49 @@ impl<M: 'static> Page<M> {
         label: impl Display,
         options: &[T],
         current: &T,
-        on_change: fn(&mut M, T),
+        on_change: impl Fn(&mut M, T) + 'static,
     ) -> &mut Self {
-        let next = options
-            .iter()
-            .position(|option| option == current)
-            .map_or(0, |i| (i + 1) % options.len().max(1));
-        let next = options.get(next).cloned();
-        self.push(
-            Widget::Button {
-                label: clip(format!("{label}: {current}")),
-            },
-            Some(Box::new(move |state, _| {
-                if let Some(next) = &next {
-                    on_change(state, next.clone());
-                }
-            })),
-        )
+        self.cycle_shown(label, options, current, current.to_string(), on_change)
+    }
+
+    pub fn choice<T: Choice>(
+        &mut self,
+        label: impl Display,
+        current: &T,
+        on_change: impl Fn(&mut M, T) + 'static,
+    ) -> &mut Self {
+        self.cycle_shown(label, &T::choices(), current, current.label(), on_change)
+    }
+
+    pub fn fields<T: Settings>(&mut self, value: &T, access: fn(&mut M) -> &mut T) -> &mut Self {
+        value.add_to(
+            self,
+            &Editor::new(move |state, change| change(access(state))),
+        );
+        self
+    }
+
+    #[cfg(feature = "serde")]
+    pub fn config<T>(
+        &mut self,
+        config: &crate::config::Config<T>,
+        access: fn(&mut M) -> &mut crate::config::Config<T>,
+    ) -> &mut Self
+    where
+        T: Settings + serde::Serialize + serde::de::DeserializeOwned + Default,
+    {
+        config.get().add_to(
+            self,
+            &Editor::new(move |state, change| access(state).edit(|value| change(value))),
+        );
+        self
     }
 
     pub fn list<T: Clone + PartialEq + Display + 'static>(
         &mut self,
         options: &[T],
         selected: Option<&T>,
-        on_select: fn(&mut M, T),
+        on_select: impl Fn(&mut M, T) + 'static,
     ) -> &mut Self {
         let options: Vec<T> = options.iter().take(MAX_ROWS).cloned().collect();
         let rows = options.iter().map(|o| clip(o.to_string())).collect();
@@ -173,12 +197,100 @@ impl<M: 'static> Page<M> {
         }
     }
 
+    fn cycle_shown<T: Clone + PartialEq + 'static>(
+        &mut self,
+        label: impl Display,
+        options: &[T],
+        current: &T,
+        shown: String,
+        on_change: impl Fn(&mut M, T) + 'static,
+    ) -> &mut Self {
+        let next = options
+            .iter()
+            .position(|option| option == current)
+            .map_or(0, |i| (i + 1) % options.len().max(1));
+        let next = options.get(next).cloned();
+        self.push(
+            Widget::Button {
+                label: clip(format!("{label}: {shown}")),
+            },
+            Some(Box::new(move |state, _| {
+                if let Some(next) = &next {
+                    on_change(state, next.clone());
+                }
+            })),
+        )
+    }
+
     fn push(&mut self, widget: Widget, action: Option<Action<M>>) -> &mut Self {
         if self.widgets.len() < MAX_WIDGETS {
             self.widgets.push(widget);
             self.actions.push(action);
         }
         self
+    }
+}
+
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be shown on a settings page",
+    label = "no way to pick a value of this type",
+    note = "derive `Choice` for an enum of unit variants, or mark the field `#[setting(options = [...])]`, `#[setting(range = a..=b)]` or `#[setting(skip)]`"
+)]
+pub trait Choice: Clone + PartialEq + 'static {
+    fn choices() -> Vec<Self>;
+    fn label(&self) -> String;
+}
+
+impl Choice for Corner {
+    fn choices() -> Vec<Self> {
+        Corner::ALL.to_vec()
+    }
+
+    fn label(&self) -> String {
+        match self {
+            Corner::TopLeft => "Top left",
+            Corner::TopRight => "Top right",
+            Corner::BottomLeft => "Bottom left",
+            Corner::BottomRight => "Bottom right",
+        }
+        .to_owned()
+    }
+}
+
+pub trait Settings: 'static {
+    fn add_to<M: 'static>(&self, page: &mut Page<M>, editor: &Editor<M, Self>)
+    where
+        Self: Sized;
+}
+
+type Edit<M, T> = dyn Fn(&mut M, &mut dyn FnMut(&mut T));
+
+pub struct Editor<M, T> {
+    edit: Rc<Edit<M, T>>,
+}
+
+impl<M, T> Clone for Editor<M, T> {
+    fn clone(&self) -> Self {
+        Self {
+            edit: Rc::clone(&self.edit),
+        }
+    }
+}
+
+impl<M, T> Editor<M, T> {
+    pub fn new(edit: impl Fn(&mut M, &mut dyn FnMut(&mut T)) + 'static) -> Self {
+        Self {
+            edit: Rc::new(edit),
+        }
+    }
+
+    pub fn edit(&self, state: &mut M, change: impl FnOnce(&mut T)) {
+        let mut change = Some(change);
+        (self.edit)(state, &mut |value| {
+            if let Some(change) = change.take() {
+                change(value);
+            }
+        });
     }
 }
 
@@ -190,6 +302,8 @@ impl<M> std::fmt::Debug for Page<M> {
             .finish()
     }
 }
+
+pub use ferrite_macros::{Choice, Settings};
 
 pub fn open<M: 'static>(builder: PageBuilder<M>) {
     use_host();

@@ -12,6 +12,9 @@ All notable changes to Ferrite are listed here. The format follows [Keep a Chang
 - `game` (player, clock, raycast), `hud` panels, `chat`, `command` (vanilla commands as the player), `log`, `storage`.
 - `Config<T>`: JSON settings that survive added, removed and broken fields; `update`, `edit`, `reset`, `reload`.
 - `ui`: a settings page in Options > Mods and the mod's own screens, with handlers bound to widgets and pages rebuilt after events.
+- `#[derive(Settings)]` and `Page::config` / `Page::fields`: a settings page built from a config struct, with `#[setting(label, options, range, step, skip)]`.
+- `#[derive(Choice)]` and `Page::choice` for enums picked on a page; `Corner` implements `Choice`.
+- Page handlers accept any closure, including ones that capture values.
 - `testing::TestGame`: run a mod in `cargo test` against a fake game.
 - `cargo ferrite new | build | test | run | check | doctor`.
 - Example mods `hello` and `compass`, the modding guide and CI.

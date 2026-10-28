@@ -36,7 +36,7 @@ pub mod prelude {
     #[cfg(feature = "serde")]
     pub use crate::config::Config;
     pub use crate::hud::{Color, Corner, Panel};
-    pub use crate::ui::Page;
+    pub use crate::ui::{Choice, Page, Settings};
     pub use crate::{
         Args, CommandResult, Error, FromArgs, Hooks, Mod, chat, command, export_mod, game, hud,
         log, no_reply, reply, storage, ui,

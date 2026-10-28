@@ -6,6 +6,24 @@ use syn::{
     parse_macro_input,
 };
 
+mod settings;
+
+#[proc_macro_derive(Settings, attributes(setting))]
+pub fn derive_settings(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    settings::expand_settings(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(Choice, attributes(choice))]
+pub fn derive_choice(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    settings::expand_choice(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
 #[proc_macro_derive(FromArgs, attributes(rest, default))]
 pub fn derive_from_args(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
