@@ -17,6 +17,7 @@ pub mod sdk {
 pub struct Adapter<M> {
     inner: M,
     hooks: Hooks<M>,
+    ticks: u64,
 }
 
 impl<M: Mod> Adapter<M> {
@@ -24,7 +25,12 @@ impl<M: Mod> Adapter<M> {
         let mut hooks = Hooks::new();
         let inner = M::init(&mut hooks).map_err(crate::Error::into_message)?;
         let registration = hooks.registration();
-        Ok((Self { inner, hooks }, registration))
+        let adapter = Self {
+            inner,
+            hooks,
+            ticks: 0,
+        };
+        Ok((adapter, registration))
     }
 
     pub fn inner(&self) -> &M {
@@ -32,8 +38,14 @@ impl<M: Mod> Adapter<M> {
     }
 
     pub fn tick(&mut self, tick: u64) {
+        self.ticks += 1;
         if let Some(handler) = self.hooks.tick {
             handler(&mut self.inner, tick);
+        }
+        for &(interval, handler) in &self.hooks.timers {
+            if self.ticks % interval == 0 {
+                handler(&mut self.inner);
+            }
         }
     }
 

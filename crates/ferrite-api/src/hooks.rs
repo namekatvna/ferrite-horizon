@@ -7,10 +7,14 @@ pub type CommandHandler<M> = for<'a> fn(&mut M, Args<'a>) -> CommandResult;
 pub type TickHandler<M> = fn(&mut M, u64);
 pub type FrameHandler<M> = fn(&mut M, f32);
 pub type ChatHandler<M> = for<'a> fn(&mut M, &'a str);
+pub type TimerHandler<M> = fn(&mut M);
+
+pub const TICKS_PER_SECOND: u64 = 20;
 
 pub struct Hooks<M> {
     pub(crate) commands: Vec<(String, CommandHandler<M>)>,
     pub(crate) tick: Option<TickHandler<M>>,
+    pub(crate) timers: Vec<(u64, TimerHandler<M>)>,
     pub(crate) frame: Option<FrameHandler<M>>,
     pub(crate) chat: Option<ChatHandler<M>>,
 }
@@ -20,6 +24,7 @@ impl<M> Hooks<M> {
         Self {
             commands: Vec::new(),
             tick: None,
+            timers: Vec::new(),
             frame: None,
             chat: None,
         }
@@ -38,6 +43,15 @@ impl<M> Hooks<M> {
     pub fn on_tick(&mut self, handler: TickHandler<M>) -> &mut Self {
         self.tick = Some(handler);
         self
+    }
+
+    pub fn every(&mut self, ticks: u64, handler: TimerHandler<M>) -> &mut Self {
+        self.timers.push((ticks.max(1), handler));
+        self
+    }
+
+    pub fn every_seconds(&mut self, seconds: u64, handler: TimerHandler<M>) -> &mut Self {
+        self.every(seconds.saturating_mul(TICKS_PER_SECOND), handler)
     }
 
     pub fn on_frame(&mut self, handler: FrameHandler<M>) -> &mut Self {
@@ -64,7 +78,7 @@ impl<M> Hooks<M> {
     pub(crate) fn registration(&self) -> Registration {
         Registration {
             commands: self.commands().map(str::to_owned).collect(),
-            tick: self.tick.is_some(),
+            tick: self.tick.is_some() || !self.timers.is_empty(),
             frame: self.frame.is_some(),
             chat: self.chat.is_some(),
         }
@@ -76,6 +90,10 @@ impl<M> fmt::Debug for Hooks<M> {
         f.debug_struct("Hooks")
             .field("commands", &self.commands().collect::<Vec<_>>())
             .field("tick", &self.tick.is_some())
+            .field(
+                "timers",
+                &self.timers.iter().map(|(t, _)| *t).collect::<Vec<_>>(),
+            )
             .field("frame", &self.frame.is_some())
             .field("chat", &self.chat.is_some())
             .finish()
