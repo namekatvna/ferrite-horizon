@@ -357,7 +357,49 @@ log::warn("...");
 
 ## Testing
 
-Unit-test plain Rust logic with `cargo test`. Test the mod as the game runs it with `cargo ferrite test`, which plays `tests/*.toml` scripts in Horizon's sandbox:
+### In Rust (`ferrite_api::testing`)
+
+`cargo test` runs the mod natively against a fake game: no wasm build, normal `assert`s, a debugger works. Write the tests inside the mod crate (`#[cfg(test)] mod tests` in `src/lib.rs`): a `cdylib` crate cannot be linked from `tests/`.
+
+```rust
+#[cfg(test)]
+mod tests {
+    use ferrite_api::testing::{TestGame, World};
+
+    use super::*;
+
+    #[test]
+    fn panel_follows_the_player() {
+        let mut game = TestGame::<Compass>::start();
+        game.update_world(|w| w.player.as_mut().unwrap().yaw = 180.0).tick();
+        assert_eq!(game.panel_lines(), ["XYZ 0 64 0", "Facing North", "Overworld 06:00"]);
+
+        game.click_setting("Corner").tick();
+        assert_eq!(game.panel().unwrap().corner(), Corner::TopRight);
+
+        game.restart().tick();
+        assert_eq!(game.panel().unwrap().corner(), Corner::TopRight);
+    }
+}
+```
+
+The fake world starts like Horizon's sandbox: the player at `0.5 64 0.5` facing south with full health in the overworld, the clock at 0. Each tick moves the clock one tick on. `World::title_screen()` has no player and no clock; `World::default().with_file("config.json", "...")` starts with stored data.
+
+| Drive the game | Read what the mod did |
+|---|---|
+| `tick()`, `ticks(n)`, `frame(seconds)` | `panel()`, `panel_lines()` |
+| `command("compass corner top-right")` returns the result | `take_chat()`, `take_commands()`, `take_quiet_commands()` |
+| `receive_chat(text)` | `take_log()` |
+| `update_world(\|w\| ...)`: player, clock, `hit` for `game::raycast`, storage, `storage_quota` | `file(key)`, `file_text(key)`, `world()` |
+| `open_settings()`, `click_setting(label)`, `pick_setting(row)` | `settings()` |
+| `click(label)`, `pick(row)`, `close_screen()` on the mod's screen | `screen()` |
+| `restart()`: the mod loads again, storage stays | `state()`: the mod's own struct, `commands()` |
+
+A label matches a button exactly or up to its value: `click_setting("Corner")` clicks `Corner: top-left`. A missing button or row fails the test with the widgets that are there. `TestGame::try_start_in(world)` returns the error of a mod that refuses to start. Each test runs in its own thread with its own fake game; use one `TestGame` per test.
+
+### In Horizon's sandbox
+
+Test the mod as the game runs it with `cargo ferrite test`, which builds it to wasm and plays `tests/*.toml` scripts in Horizon's own sandbox:
 
 ```toml
 player = { x = 0.5, y = 64.0, z = 0.5, yaw = 180.0 }

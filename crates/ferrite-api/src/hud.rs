@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::fmt;
 use std::str::FromStr;
 
-use crate::__private::sdk::hud as host;
+use crate::host;
 
 pub const MAX_LINES: usize = 16;
 pub const MAX_LINE_CHARS: usize = 256;
@@ -32,15 +32,6 @@ impl Corner {
             Self::TopRight => "top-right",
             Self::BottomLeft => "bottom-left",
             Self::BottomRight => "bottom-right",
-        }
-    }
-
-    fn to_host(self) -> host::Corner {
-        match self {
-            Self::TopLeft => host::Corner::TopLeft,
-            Self::TopRight => host::Corner::TopRight,
-            Self::BottomLeft => host::Corner::BottomLeft,
-            Self::BottomRight => host::Corner::BottomRight,
         }
     }
 }
@@ -212,15 +203,7 @@ impl Panel {
             true
         });
         if changed {
-            let lines: Vec<host::Line> = self
-                .lines
-                .iter()
-                .map(|l| host::Line {
-                    text: l.text.clone(),
-                    color: l.color.to_rgb(),
-                })
-                .collect();
-            host::set_panel(self.corner.to_host(), &lines);
+            host::hud_set_panel(self.corner, &self.lines);
         }
     }
 }
@@ -232,8 +215,13 @@ thread_local! {
 pub fn clear() {
     let had_panel = SHOWN.with(|shown| shown.borrow_mut().take().is_some());
     if had_panel {
-        host::clear();
+        host::hud_clear();
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn forget_shown() {
+    SHOWN.with(|shown| shown.borrow_mut().take());
 }
 
 #[cfg(test)]

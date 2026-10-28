@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::{Add, Mul, Sub};
 
-use crate::__private::sdk::game as host;
+use crate::host;
 
 pub const MAX_RAYCAST_DISTANCE: f32 = 1024.0;
 pub const TICKS_PER_DAY: u64 = 24_000;
@@ -230,19 +230,6 @@ impl Player {
     }
 }
 
-impl From<host::Player> for Player {
-    fn from(p: host::Player) -> Self {
-        Self {
-            position: Vec3::new(p.x, p.y, p.z),
-            yaw: p.yaw,
-            pitch: p.pitch,
-            health: p.health,
-            food: p.food,
-            dimension: p.dimension.into(),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Clock {
     pub game_time: u64,
@@ -274,15 +261,6 @@ impl Clock {
     }
 }
 
-impl From<host::Clock> for Clock {
-    fn from(c: host::Clock) -> Self {
-        Self {
-            game_time: c.game_time,
-            day_time: c.day_time,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Hit {
     pub block_pos: BlockPos,
@@ -290,30 +268,20 @@ pub struct Hit {
     pub block: String,
 }
 
-impl From<host::Hit> for Hit {
-    fn from(h: host::Hit) -> Self {
-        Self {
-            block_pos: BlockPos::new(h.block_x, h.block_y, h.block_z),
-            point: Vec3::new(h.x, h.y, h.z),
-            block: h.block,
-        }
-    }
-}
-
 pub fn player() -> Option<Player> {
-    host::get_player().map(Player::from)
+    host::player()
 }
 
 pub fn clock() -> Option<Clock> {
-    host::get_clock().map(Clock::from)
+    host::clock()
 }
 
 pub fn raycast(distance: f32) -> Option<Hit> {
-    host::raycast(distance.clamp(0.0, MAX_RAYCAST_DISTANCE)).map(Hit::from)
+    host::raycast(distance.clamp(0.0, MAX_RAYCAST_DISTANCE))
 }
 
 pub fn in_world() -> bool {
-    host::get_clock().is_some()
+    host::clock().is_some()
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::__private::sdk::storage as host;
+use crate::host;
 
 pub const MAX_KEY_LEN: usize = 64;
 
@@ -82,15 +82,15 @@ pub(crate) struct Host;
 
 impl Backend for Host {
     fn get(&self, key: &str) -> Option<Vec<u8>> {
-        host::get(key)
+        host::storage_get(key)
     }
 
     fn set(&self, key: &str, value: &[u8]) -> Result<(), String> {
-        host::set(key, value)
+        host::storage_set(key, value)
     }
 
     fn delete(&self, key: &str) {
-        host::delete(key)
+        host::storage_delete(key)
     }
 
     #[cfg(feature = "serde")]

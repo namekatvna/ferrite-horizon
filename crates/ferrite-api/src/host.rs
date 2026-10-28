@@ -1,0 +1,140 @@
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use crate::testing::fake::*;
+#[cfg(target_arch = "wasm32")]
+pub(crate) use wasm::*;
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use crate::__private::sdk::{chat, command, game, hud, log, storage, ui};
+    use crate::game::{BlockPos, Clock, Hit, Player, Vec3};
+    use crate::hud::{Corner, Line};
+    use crate::log::Level;
+    use crate::ui::{Widget, widget_id};
+
+    pub(crate) fn log(level: Level, message: &str) {
+        let level = match level {
+            Level::Debug => log::Level::Debug,
+            Level::Info => log::Level::Info,
+            Level::Warn => log::Level::Warn,
+            Level::Error => log::Level::Error,
+        };
+        log::write(level, message);
+    }
+
+    pub(crate) fn chat_show(text: &str) {
+        chat::show(text);
+    }
+
+    pub(crate) fn command_run(line: &str) {
+        command::run(line);
+    }
+
+    pub(crate) fn command_run_quiet(lines: &[String]) {
+        command::run_quiet(lines);
+    }
+
+    pub(crate) fn player() -> Option<Player> {
+        game::get_player().map(|p| Player {
+            position: Vec3::new(p.x, p.y, p.z),
+            yaw: p.yaw,
+            pitch: p.pitch,
+            health: p.health,
+            food: p.food,
+            dimension: p.dimension.into(),
+        })
+    }
+
+    pub(crate) fn clock() -> Option<Clock> {
+        game::get_clock().map(|c| Clock {
+            game_time: c.game_time,
+            day_time: c.day_time,
+        })
+    }
+
+    pub(crate) fn raycast(distance: f32) -> Option<Hit> {
+        game::raycast(distance).map(|h| Hit {
+            block_pos: BlockPos::new(h.block_x, h.block_y, h.block_z),
+            point: Vec3::new(h.x, h.y, h.z),
+            block: h.block,
+        })
+    }
+
+    pub(crate) fn hud_set_panel(corner: Corner, lines: &[Line]) {
+        let corner = match corner {
+            Corner::TopLeft => hud::Corner::TopLeft,
+            Corner::TopRight => hud::Corner::TopRight,
+            Corner::BottomLeft => hud::Corner::BottomLeft,
+            Corner::BottomRight => hud::Corner::BottomRight,
+        };
+        let lines: Vec<hud::Line> = lines
+            .iter()
+            .map(|l| hud::Line {
+                text: l.text.clone(),
+                color: l.color.to_rgb(),
+            })
+            .collect();
+        hud::set_panel(corner, &lines);
+    }
+
+    pub(crate) fn hud_clear() {
+        hud::clear();
+    }
+
+    pub(crate) fn storage_get(key: &str) -> Option<Vec<u8>> {
+        storage::get(key)
+    }
+
+    pub(crate) fn storage_set(key: &str, value: &[u8]) -> Result<(), String> {
+        storage::set(key, value)
+    }
+
+    pub(crate) fn storage_delete(key: &str) {
+        storage::delete(key);
+    }
+
+    pub(crate) fn ui_set_settings(widgets: &[Widget]) {
+        ui::set_settings(&to_host(widgets, false));
+    }
+
+    pub(crate) fn ui_open_screen(title: &str, widgets: &[Widget]) {
+        ui::open_screen(&ui::Screen {
+            title: title.to_owned(),
+            widgets: to_host(widgets, true),
+        });
+    }
+
+    pub(crate) fn ui_close_screen() {
+        ui::close_screen();
+    }
+
+    fn to_host(widgets: &[Widget], screen: bool) -> Vec<ui::Widget> {
+        widgets
+            .iter()
+            .enumerate()
+            .map(|(index, widget)| {
+                let id = widget_id(index, screen);
+                match widget {
+                    Widget::Text { text, color } => ui::Widget::Text(ui::TextWidget {
+                        id,
+                        text: text.clone(),
+                        color: color.map_or(0, |c| c.to_rgb()),
+                    }),
+                    Widget::Button { label } => ui::Widget::Button(ui::ButtonWidget {
+                        id,
+                        label: label.clone(),
+                    }),
+                    Widget::Item { item, name } => ui::Widget::Item(ui::ItemWidget {
+                        id,
+                        item: item.clone(),
+                        name: name.clone(),
+                    }),
+                    Widget::List { rows, selected } => ui::Widget::List(ui::ListWidget {
+                        id,
+                        rows: rows.clone(),
+                        selected: *selected,
+                    }),
+                }
+            })
+            .collect()
+    }
+}

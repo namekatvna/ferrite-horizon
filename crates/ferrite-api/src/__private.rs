@@ -15,11 +15,6 @@ pub mod sdk {
     pub use horizon::mods::{chat, command, game, hud, log, storage, ui};
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-pub use crate::ui::take_host_calls as take_ui_calls;
-
-pub const SCREEN_WIDGET_IDS: u32 = SCREEN_IDS;
-
 struct Screen<M> {
     builder: PageBuilder<M>,
     page: Page<M>,

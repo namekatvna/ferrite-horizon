@@ -1,10 +1,10 @@
-use crate::__private::sdk::command as host;
+use crate::host;
 
 pub const MAX_RUN_PER_HOOK: usize = 8;
 pub const MAX_QUIET_PER_CALL: usize = 256;
 
 pub fn run(line: impl AsRef<str>) {
-    host::run(normalize(line.as_ref()))
+    host::command_run(normalize(line.as_ref()))
 }
 
 pub fn run_quiet<I, S>(lines: I)
@@ -13,7 +13,7 @@ where
     S: AsRef<str>,
 {
     for batch in batches(lines) {
-        host::run_quiet(&batch);
+        host::command_run_quiet(&batch);
     }
 }
 

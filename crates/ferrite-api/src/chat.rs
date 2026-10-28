@@ -1,5 +1,5 @@
-use crate::__private::sdk;
+use crate::host;
 
 pub fn show(text: impl AsRef<str>) {
-    sdk::chat::show(text.as_ref())
+    host::chat_show(text.as_ref())
 }

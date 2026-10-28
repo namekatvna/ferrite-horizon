@@ -1,8 +1,8 @@
 use std::fmt;
 
-use ferrite_api::__private::{Adapter, SCREEN_WIDGET_IDS, take_ui_calls};
 use ferrite_api::prelude::*;
-use ferrite_api::ui::{HostCall, Widget};
+use ferrite_api::testing::{Screen, TestGame};
+use ferrite_api::ui::Widget;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Mode {
@@ -30,6 +30,7 @@ struct Menu {
     mode: Mode,
     picks: Vec<&'static str>,
     closed: u32,
+    builds: std::cell::Cell<u32>,
 }
 
 impl Mod for Menu {
@@ -45,6 +46,7 @@ impl Mod for Menu {
 
 impl Menu {
     fn settings(&self, page: &mut Page<Self>) {
+        self.builds.set(self.builds.get() + 1);
         page.toggle("Visible", self.visible, |m, on| m.visible = on)
             .cycle("Mode", &Mode::ALL, &self.mode, |m, mode| m.mode = mode);
     }
@@ -75,15 +77,15 @@ fn button(label: &str) -> Widget {
     }
 }
 
-fn settings(visible: &str, mode: &str) -> HostCall {
-    HostCall::Settings(vec![
+fn settings(visible: &str, mode: &str) -> Vec<Widget> {
+    vec![
         button(&format!("Visible: {visible}")),
         button(&format!("Mode: {mode}")),
-    ])
+    ]
 }
 
-fn screen(selected: Option<u32>) -> HostCall {
-    HostCall::OpenScreen {
+fn screen(selected: Option<u32>) -> Screen {
+    Screen {
         title: "Pick".into(),
         widgets: vec![
             Widget::List {
@@ -95,75 +97,61 @@ fn screen(selected: Option<u32>) -> HostCall {
     }
 }
 
-fn start() -> Adapter<Menu> {
-    let (adapter, _) = Adapter::<Menu>::init().unwrap();
-    adapter
+#[test]
+fn settings_page_is_shown_at_load_and_follows_clicks() {
+    let mut game = TestGame::<Menu>::start();
+    assert_eq!(game.settings(), settings("OFF", "Fast"));
+
+    game.click_setting("Mode").click_setting("Visible");
+    assert_eq!(game.settings(), settings("ON", "Slow"));
+    assert!(game.state().visible);
+    assert_eq!(game.state().mode, Mode::Slow);
+
+    game.open_settings();
+    assert_eq!(game.settings(), settings("ON", "Slow"));
 }
 
 #[test]
-fn settings_page_is_pushed_at_load_and_follows_clicks() {
-    let mut adapter = start();
-    assert_eq!(take_ui_calls(), [settings("OFF", "Fast")]);
+fn refresh_rebuilds_after_changes_made_elsewhere() {
+    let mut game = TestGame::<Menu>::start();
+    game.command("flip").unwrap();
+    assert_eq!(game.settings(), settings("ON", "Fast"));
 
-    adapter.ui_select(1, 0);
-    adapter.ui_select(0, 0);
-    assert_eq!(
-        take_ui_calls(),
-        [settings("OFF", "Slow"), settings("ON", "Slow")]
-    );
-    assert!(adapter.inner().visible);
-    assert_eq!(adapter.inner().mode, Mode::Slow);
-
-    adapter.ui_settings_opened();
-    assert_eq!(take_ui_calls(), [settings("ON", "Slow")]);
-
-    adapter.ui_select(7, 0);
-    assert_eq!(take_ui_calls(), []);
-}
-
-#[test]
-fn refresh_pushes_only_changes() {
-    let mut adapter = start();
-    take_ui_calls();
-
-    adapter.command("flip", "").unwrap();
-    assert_eq!(take_ui_calls(), [settings("ON", "Fast")]);
-
-    ui::refresh();
-    adapter.tick(0);
-    assert_eq!(take_ui_calls(), []);
+    let builds = game.state().builds.get();
+    game.tick();
+    assert_eq!(game.state().builds.get(), builds);
 }
 
 #[test]
 fn screens_open_update_and_close() {
-    let mut adapter = start();
-    take_ui_calls();
+    let mut game = TestGame::<Menu>::start();
+    assert_eq!(game.screen(), None);
 
-    adapter.command("menu", "").unwrap();
-    assert_eq!(take_ui_calls(), [screen(None)]);
+    game.command("/menu").unwrap();
+    assert_eq!(game.screen(), Some(screen(None)));
 
-    adapter.ui_select(SCREEN_WIDGET_IDS, 1);
-    assert_eq!(adapter.inner().picks, ["blue"]);
-    assert_eq!(take_ui_calls(), [screen(Some(1))]);
+    game.pick("blue");
+    assert_eq!(game.state().picks, ["blue"]);
+    assert_eq!(game.screen(), Some(screen(Some(1))));
 
-    adapter.ui_select(SCREEN_WIDGET_IDS + 1, 0);
-    assert_eq!(take_ui_calls(), [HostCall::CloseScreen]);
-    assert_eq!(adapter.inner().closed, 0);
-
-    adapter.ui_select(SCREEN_WIDGET_IDS, 0);
-    assert_eq!(adapter.inner().picks, ["blue"]);
+    game.click("Done");
+    assert_eq!(game.screen(), None);
+    assert_eq!(game.state().closed, 0);
 }
 
 #[test]
 fn player_closing_the_screen_calls_the_hook() {
-    let mut adapter = start();
-    adapter.command("menu", "").unwrap();
-    take_ui_calls();
+    let mut game = TestGame::<Menu>::start();
+    game.command("menu").unwrap();
 
-    adapter.ui_closed();
-    assert_eq!(adapter.inner().closed, 1);
-    assert_eq!(take_ui_calls(), []);
+    game.close_screen();
+    assert_eq!(game.state().closed, 1);
+    game.close_screen();
+    assert_eq!(game.state().closed, 1);
+}
 
-    adapter.ui_closed();
-    assert_eq!(adapter.inner().closed, 1);
+#[test]
+#[should_panic(expected = "no button `Speed` on the settings page:\n  button `Visible: OFF`")]
+fn missing_widgets_are_reported_with_what_is_there() {
+    TestGame::<Menu>::start().click_setting("Speed");
 }

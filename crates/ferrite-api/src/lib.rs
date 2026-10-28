@@ -1,6 +1,7 @@
 mod args;
 mod error;
 mod hooks;
+mod host;
 mod mod_trait;
 
 #[doc(hidden)]
@@ -14,6 +15,8 @@ pub mod game;
 pub mod hud;
 pub mod log;
 pub mod storage;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod testing;
 pub mod ui;
 
 pub use args::{ArgCursor, Args, CommandResult, FromArgs};

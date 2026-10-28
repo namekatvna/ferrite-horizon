@@ -2,7 +2,7 @@ use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::fmt::Display;
 
-use crate::__private::sdk::ui as host;
+use crate::host;
 use crate::hud::Color;
 
 pub const MAX_WIDGETS: usize = 64;
@@ -224,13 +224,6 @@ pub(crate) fn take_requests() -> Requests {
     REQUESTS.with(|r| std::mem::take(&mut *r.borrow_mut()))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum HostCall {
-    Settings(Vec<Widget>),
-    OpenScreen { title: String, widgets: Vec<Widget> },
-    CloseScreen,
-}
-
 pub(crate) struct HostUi {
     pub(crate) set_settings: fn(&[Widget]),
     pub(crate) open_screen: fn(&str, &[Widget]),
@@ -238,9 +231,9 @@ pub(crate) struct HostUi {
 }
 
 static HOST: HostUi = HostUi {
-    set_settings,
-    open_screen,
-    close_screen,
+    set_settings: host::ui_set_settings,
+    open_screen: host::ui_open_screen,
+    close_screen: host::ui_close_screen,
 };
 
 thread_local! {
@@ -255,80 +248,15 @@ pub(crate) fn active_host() -> Option<&'static HostUi> {
     ACTIVE_HOST.with(Cell::get)
 }
 
-fn set_settings(widgets: &[Widget]) {
-    let converted = to_host(widgets, 0);
-    #[cfg(target_arch = "wasm32")]
-    host::set_settings(&converted);
-    #[cfg(not(target_arch = "wasm32"))]
-    record(HostCall::Settings(widgets.to_vec()), converted);
-}
-
-fn open_screen(title: &str, widgets: &[Widget]) {
-    let screen = host::Screen {
-        title: title.to_owned(),
-        widgets: to_host(widgets, SCREEN_IDS),
-    };
-    #[cfg(target_arch = "wasm32")]
-    host::open_screen(&screen);
-    #[cfg(not(target_arch = "wasm32"))]
-    record(
-        HostCall::OpenScreen {
-            title: title.to_owned(),
-            widgets: widgets.to_vec(),
-        },
-        screen,
-    );
-}
-
-fn close_screen() {
-    #[cfg(target_arch = "wasm32")]
-    host::close_screen();
-    #[cfg(not(target_arch = "wasm32"))]
-    record(HostCall::CloseScreen, ());
+pub(crate) fn widget_id(index: usize, screen: bool) -> u32 {
+    let index = u32::try_from(index).unwrap_or(u32::MAX);
+    if screen { SCREEN_IDS + index } else { index }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-thread_local! {
-    static HOST_CALLS: RefCell<Vec<HostCall>> = const { RefCell::new(Vec::new()) };
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn record<T>(call: HostCall, _converted: T) {
-    HOST_CALLS.with(|calls| calls.borrow_mut().push(call));
-}
-
-#[doc(hidden)]
-#[cfg(not(target_arch = "wasm32"))]
-pub fn take_host_calls() -> Vec<HostCall> {
-    HOST_CALLS.with(|calls| std::mem::take(&mut *calls.borrow_mut()))
-}
-
-fn to_host(widgets: &[Widget], first_id: u32) -> Vec<host::Widget> {
-    widgets
-        .iter()
-        .zip(first_id..)
-        .map(|(widget, id)| match widget {
-            Widget::Text { text, color } => host::Widget::Text(host::TextWidget {
-                id,
-                text: text.clone(),
-                color: color.map_or(0, Color::to_rgb),
-            }),
-            Widget::Button { label } => host::Widget::Button(host::ButtonWidget {
-                id,
-                label: label.clone(),
-            }),
-            Widget::Item { item, name } => host::Widget::Item(host::ItemWidget {
-                id,
-                item: item.clone(),
-                name: name.clone(),
-            }),
-            Widget::List { rows, selected } => host::Widget::List(host::ListWidget {
-                id,
-                rows: rows.clone(),
-                selected: *selected,
-            }),
-        })
-        .collect()
+pub(crate) fn forget_state() {
+    REQUESTS.with(|r| *r.borrow_mut() = Requests::default());
+    ACTIVE_HOST.with(|active| active.set(None));
 }
 
 fn clip(mut text: String) -> String {
@@ -441,12 +369,9 @@ mod tests {
     }
 
     #[test]
-    fn host_ids_follow_widget_order() {
-        let page = Page::build(&State::default(), settings);
-        let widgets = to_host(page.widgets(), SCREEN_IDS);
-        let host::Widget::List(list) = &widgets[4] else {
-            panic!("list expected");
-        };
-        assert_eq!(list.id, SCREEN_IDS + 4);
+    fn screen_ids_do_not_collide_with_settings_ids() {
+        assert_eq!(widget_id(4, false), 4);
+        assert_eq!(widget_id(4, true), SCREEN_IDS + 4);
+        assert!(widget_id(MAX_WIDGETS, false) < widget_id(0, true));
     }
 }
