@@ -57,9 +57,8 @@ impl<M: Mod> Adapter<M> {
 
     pub fn command(&mut self, name: &str, args: &str) -> Result<Option<String>, String> {
         match self.hooks.find_command(name) {
-            Some(handler) => {
-                handler(&mut self.inner, Args::new(args)).map_err(crate::Error::into_message)
-            }
+            Some(handler) => handler(&mut self.inner, Args::for_command(name, args))
+                .map_err(crate::Error::into_message),
             None => Err(format!("Unknown command /{name}")),
         }
     }

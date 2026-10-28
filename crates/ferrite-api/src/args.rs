@@ -5,14 +5,39 @@ use crate::Error;
 
 pub type CommandResult = Result<Option<String>, Error>;
 
+pub trait FromArgs: Sized {
+    const USAGE: &'static str;
+
+    fn from_args(cursor: &mut ArgCursor<'_>) -> Result<Self, Error>;
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Args<'a> {
+    command: &'a str,
     raw: &'a str,
 }
 
 impl<'a> Args<'a> {
     pub fn new(raw: &'a str) -> Self {
-        Self { raw: raw.trim() }
+        Self::for_command("", raw)
+    }
+
+    pub fn for_command(command: &'a str, raw: &'a str) -> Self {
+        Self {
+            command,
+            raw: raw.trim(),
+        }
+    }
+
+    pub fn command(&self) -> &'a str {
+        self.command
+    }
+
+    pub fn parse<T: FromArgs>(&self) -> Result<T, Error> {
+        let mut cursor = ArgCursor::new(self.command, self.raw);
+        let value = T::from_args(&mut cursor)?;
+        cursor.finish()?;
+        Ok(value)
     }
 
     pub fn as_str(&self) -> &'a str {
@@ -81,6 +106,122 @@ where
             index + 1
         ))
     })
+}
+
+#[derive(Debug)]
+pub struct ArgCursor<'a> {
+    command: &'a str,
+    rest: &'a str,
+    usage: &'static str,
+}
+
+impl<'a> ArgCursor<'a> {
+    fn new(command: &'a str, raw: &'a str) -> Self {
+        Self {
+            command,
+            rest: raw.trim(),
+            usage: "",
+        }
+    }
+
+    pub fn set_usage(&mut self, usage: &'static str) {
+        self.usage = usage;
+    }
+
+    pub fn usage(&self) -> String {
+        let line = match self.command {
+            "" => self.usage.to_owned(),
+            command => format!("/{command} {}", self.usage),
+        };
+        format!("Usage: {}", line.trim_end())
+    }
+
+    pub fn next_word(&mut self) -> Option<&'a str> {
+        let rest = self.rest.trim_start();
+        if rest.is_empty() {
+            self.rest = rest;
+            return None;
+        }
+        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let (word, tail) = rest.split_at(end);
+        self.rest = tail;
+        Some(word)
+    }
+
+    pub fn required<T>(&mut self, name: &str) -> Result<T, Error>
+    where
+        T: FromStr,
+        T::Err: Display,
+    {
+        match self.next_word() {
+            Some(word) => parse_named(word, name),
+            None => Err(self.missing_argument(name)),
+        }
+    }
+
+    pub fn optional<T>(&mut self, name: &str) -> Result<Option<T>, Error>
+    where
+        T: FromStr,
+        T::Err: Display,
+    {
+        self.next_word()
+            .map(|word| parse_named(word, name))
+            .transpose()
+    }
+
+    pub fn required_rest<T>(&mut self, name: &str) -> Result<T, Error>
+    where
+        T: FromStr,
+        T::Err: Display,
+    {
+        match self.take_rest() {
+            "" => Err(self.missing_argument(name)),
+            rest => parse_named(rest, name),
+        }
+    }
+
+    pub fn optional_rest<T>(&mut self, name: &str) -> Result<Option<T>, Error>
+    where
+        T: FromStr,
+        T::Err: Display,
+    {
+        match self.take_rest() {
+            "" => Ok(None),
+            rest => parse_named(rest, name).map(Some),
+        }
+    }
+
+    pub fn missing_argument(&self, name: &str) -> Error {
+        Error::new(format!("Missing <{name}>. {}", self.usage()))
+    }
+
+    pub fn missing_option(&self) -> Error {
+        Error::new(format!("Missing option. {}", self.usage()))
+    }
+
+    pub fn unknown_option(&self, word: &str) -> Error {
+        Error::new(format!("Unknown option `{word}`. {}", self.usage()))
+    }
+
+    fn take_rest(&mut self) -> &'a str {
+        std::mem::take(&mut self.rest).trim()
+    }
+
+    fn finish(&mut self) -> Result<(), Error> {
+        match self.next_word() {
+            Some(word) => Err(Error::new(format!("Unexpected `{word}`. {}", self.usage()))),
+            None => Ok(()),
+        }
+    }
+}
+
+fn parse_named<T>(text: &str, name: &str) -> Result<T, Error>
+where
+    T: FromStr,
+    T::Err: Display,
+{
+    text.parse()
+        .map_err(|reason| Error::new(format!("Invalid <{name}> `{text}`: {reason}")))
 }
 
 #[cfg(test)]

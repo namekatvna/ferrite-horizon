@@ -15,8 +15,9 @@ pub mod hud;
 pub mod log;
 pub mod storage;
 
-pub use args::{Args, CommandResult};
+pub use args::{ArgCursor, Args, CommandResult, FromArgs};
 pub use error::Error;
+pub use ferrite_macros::FromArgs;
 pub use hooks::{
     ChatHandler, CommandHandler, FrameHandler, Hooks, TICKS_PER_SECOND, TickHandler, TimerHandler,
 };
@@ -29,7 +30,8 @@ pub mod prelude {
     pub use crate::config::Config;
     pub use crate::hud::{Color, Corner, Panel};
     pub use crate::{
-        Args, CommandResult, Error, Hooks, Mod, chat, command, export_mod, game, hud, log, storage,
+        Args, CommandResult, Error, FromArgs, Hooks, Mod, chat, command, export_mod, game, hud,
+        log, storage,
     };
 }
 

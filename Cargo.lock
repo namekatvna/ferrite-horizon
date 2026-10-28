@@ -74,6 +74,11 @@ dependencies = [
 [[package]]
 name = "ferrite-macros"
 version = "0.0.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "foldhash"

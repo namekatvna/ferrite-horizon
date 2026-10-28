@@ -22,8 +22,11 @@ ferrite-api = { path = "crates/ferrite-api", version = "0.0.1" }
 ferrite-macros = { path = "crates/ferrite-macros", version = "0.0.1" }
 ferrite-common = { path = "crates/ferrite-common", version = "0.0.1" }
 postcard = { version = "1", default-features = false, features = ["alloc"] }
+proc-macro2 = "1"
+quote = "1"
 serde = "1"
 serde_json = "1"
+syn = "2"
 wit-bindgen = { version = "0.60.0", default-features = false, features = ["macros", "realloc"] }
 
 [profile.release]
