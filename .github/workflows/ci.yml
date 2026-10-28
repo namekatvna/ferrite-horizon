@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: "1.99.1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy -p ferrite-api -p hello -p compass --target wasm32-unknown-unknown -- -D warnings
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace
+
+  sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Horizon revision
+        id: horizon
+        run: echo "rev=$(sed -E 's#.*/tree/([0-9a-f]+)/.*#\1#' crates/ferrite-api/wit/UPSTREAM)" >> "$GITHUB_OUTPUT"
+      - name: Cache cargo-horizon-mod
+        id: tool
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-horizon-mod
+          key: cargo-horizon-mod-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ steps.horizon.outputs.rev }}
+      - name: Install cargo-horizon-mod
+        if: steps.tool.outputs.cache-hit != 'true'
+        run: cargo install --locked --git https://github.com/horizon-rust/horizon --rev ${{ steps.horizon.outputs.rev }} cargo-horizon-mod
+      - run: cargo build -p cargo-ferrite
+      - run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+      - run: cargo ferrite doctor
+      - name: Example mods in Horizon's sandbox
+        run: |
+          for dir in examples/*/; do
+            [ -f "$dir/horizon-mod.toml" ] || continue
+            (cd "$dir" && cargo ferrite test)
+          done
+      - name: A new mod builds and passes its tests
+        run: |
+          cd "$RUNNER_TEMP"
+          cargo ferrite new ci-probe --ferrite-path "$GITHUB_WORKSPACE"
+          cd ci-probe
+          cargo ferrite test
