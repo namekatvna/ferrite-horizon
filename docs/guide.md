@@ -92,14 +92,63 @@ Or copy `target/horizon-mod/<id>.hmod` into `horizon-mods/` next to the game's `
 |---|---|---|
 | `command("name", f)` | `fn(&mut self, Args) -> CommandResult` | `/name ...` typed by the player |
 | `on_tick(f)` | `fn(&mut self, u64)` | 20 times a second |
+| `every(ticks, f)` | `fn(&mut self)` | once every `ticks` ticks |
+| `every_seconds(n, f)` | `fn(&mut self)` | once every `n` seconds |
 | `on_frame(f)` | `fn(&mut self, f32)` | every frame, with its duration in seconds |
 | `on_chat(f)` | `fn(&mut self, &str)` | every chat line the player receives |
 
-Handlers are methods (`Self::greet`) or closures without captures (`|m, _| m.ticks += 1`). Registering a command name twice keeps the last handler. A leading `/` in the name is ignored.
+Handlers are methods (`Self::greet`) or closures without captures (`|m, _| m.ticks += 1`). Registering a command name twice keeps the last handler. A leading `/` in the name is ignored. Timers count ticks since the mod loaded and fire after each full interval; any number can be registered.
 
 Returning `Err` from `init` keeps the mod off and shows the message to the player.
 
-## Commands and arguments
+## Commands
+
+Describe a command as a type and let Ferrite parse it:
+
+```rust
+#[derive(FromArgs)]
+enum Waypoint {
+    #[default]
+    List,
+    Add { name: String, x: i32, y: i32, z: i32 },
+    Remove { name: String },
+    Note { name: String, #[rest] text: String },
+}
+
+fn waypoint(&mut self, args: Args) -> CommandResult {
+    match args.parse()? {
+        Waypoint::List => Ok(Some(self.list())),
+        Waypoint::Add { name, x, y, z } => self.add(name, x, y, z),
+        Waypoint::Remove { name } => self.remove(&name),
+        Waypoint::Note { name, text } => self.note(&name, text),
+    }
+}
+```
+
+| You write | Player types |
+|---|---|
+| variant `SetColor` | `set-color` (any case) |
+| field `x: i32` | one word parsed as `i32` |
+| field `color: Option<u32>` | an optional word; optional fields come last |
+| `#[rest] text: String` | everything left, spaces kept; last field only |
+| `#[default]` on a unit variant | used when nothing is typed |
+
+Structs parse positionally: `#[derive(FromArgs)] struct Teleport { x: f64, y: f64, z: f64 }`. Any type implementing `FromStr` with a printable error works as a field, including `Corner`.
+
+Errors are generated from the type and point at the problem:
+
+```
+Missing <z>. Usage: /wp add <name> <x> <y> <z>
+Invalid <y> `two`: invalid digit found in string
+Unknown option `fly`. Usage: /wp list | add <name> <x> <y> <z> | remove <name> | note <name> <text...>
+Unexpected `now`. Usage: /wp remove <name>
+```
+
+`Waypoint::USAGE` holds the usage line for help messages. Mistakes in the type itself, such as `#[rest]` on a middle field, are compile errors.
+
+## Arguments by hand
+
+For simple commands, read `Args` directly:
 
 ```rust
 fn teleport(&mut self, args: Args) -> CommandResult {
@@ -119,6 +168,8 @@ fn teleport(&mut self, args: Args) -> CommandResult {
 | `rest(i)` | everything from word `i`, inner spacing kept |
 | `get::<T>(i)` | parsed word, `Missing argument #n` or `Invalid argument #n \`w\`: reason` |
 | `get_or(i, default)` | like `get`, but `default` when the word is missing |
+| `parse::<T>()` | the whole line as a `FromArgs` type |
+| `command()` | the command's name |
 
 `CommandResult` is `Result<Option<String>, Error>`: `Ok(Some(text))` is feedback, `Ok(None)` is silent, `Err(e)` is shown in red. `Error` converts from anything printable, so `?` works on parse errors, storage errors and strings: `Err("no such home".into())`.
 
