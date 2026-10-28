@@ -1,0 +1,45 @@
+[[step]]
+join = "Alex"
+blocks = [{ x = 1, y = 64, z = 1, state = "minecraft:stone" }]
+expect.commands = ["pos1", "pos2", "set", "replace", "undo", "sel"]
+
+[[step]]
+command = "pos1"
+expect.feedback = "First corner at 0 64 0"
+
+[[step]]
+command = "pos2 ~2 ~1 ~2"
+expect.feedback = "Second corner at 2 65 2"
+
+[[step]]
+command = "set glass"
+expect.feedback = "Set 18 blocks to minecraft:glass"
+expect.blocks = [
+    { x = 0, y = 64, z = 0, state = "minecraft:glass" },
+    { x = 2, y = 65, z = 2, state = "minecraft:glass" },
+    { x = 3, y = 64, z = 0, state = "minecraft:air" },
+]
+
+[[step]]
+command = "replace glass gold_block"
+expect.feedback = "Replaced 18 minecraft:glass with minecraft:gold_block"
+
+[[step]]
+command = "undo"
+expect.feedback = "Restored 18 blocks"
+expect.blocks = [{ x = 1, y = 65, z = 1, state = "minecraft:glass" }]
+
+[[step]]
+command = "undo"
+expect.blocks = [
+    { x = 1, y = 64, z = 1, state = "minecraft:stone" },
+    { x = 1, y = 65, z = 1, state = "minecraft:air" },
+]
+
+[[step]]
+command = "undo"
+expect.error = "Nothing to undo"
+
+[[step]]
+command = "set"
+expect.error = "Unknown or incomplete command, see below for error"

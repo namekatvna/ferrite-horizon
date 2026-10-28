@@ -2,6 +2,8 @@
 
 Ferrite mods are Rust crates compiled to WebAssembly and run by Horizon in a sandbox. You write against `ferrite-api` only.
 
+A **client mod** runs in the player's game: HUD, screens, keys, commands for that player. A **server mod** runs where the world is simulated: every player's joins, commands and broken blocks, and the world's blocks. Most of this guide is about client mods; see [Server mods](#server-mods) for the other side.
+
 ## Setup
 
 ```sh
@@ -19,7 +21,7 @@ cd my-mod
 cargo ferrite test
 ```
 
-This makes a crate with a `/hello` command, its manifest and a test script. `--name "My Mod"` sets the display name. `--ferrite-path <dir>` uses a local Ferrite checkout instead of git. Inside a Cargo workspace the mod reuses the workspace's `ferrite-api` dependency; add it to the workspace members.
+This makes a crate with a `/hello` command, its manifest and a test script. `--server` makes a server mod instead. `--name "My Mod"` sets the display name. `--ferrite-path <dir>` uses a local Ferrite checkout instead of git. Inside a Cargo workspace the mod reuses the workspace's `ferrite-api` dependency; add it to the workspace members.
 
 `Cargo.toml`:
 
@@ -455,6 +457,118 @@ chat::show("Only you see this");
 log::info("goes to the game log as [mod <id>] ...");
 log::warn("...");
 ```
+
+## Server mods
+
+Experimental in Horizon: the manifest says `api = "0.3"` and `side = "server"`.
+
+```toml
+id = "builder"
+name = "Builder"
+version = "0.1.0"
+api = "0.3"
+side = "server"
+capabilities = ["players", "world"]
+```
+
+```rust
+use ferrite_api::server::prelude::*;
+
+#[derive(FromArgs)]
+struct Pillar {
+    height: u8,
+    block: Option<BlockState>,
+}
+
+#[derive(Default)]
+struct Beacons;
+
+impl ServerMod for Beacons {
+    fn init(hooks: &mut ServerHooks<Self>) -> Result<Self, Error> {
+        hooks
+            .parsed_command("pillar", Self::pillar)
+            .on_join(|_, player| { player.tell(format!("Welcome, {}!", player.name)); })
+            .on_block_break(|_, player, pos, state| {
+                if state.is("diamond_ore") {
+                    players::broadcast(format!("{} found diamonds at {pos}", player.name));
+                }
+            });
+        Ok(Self)
+    }
+}
+
+impl Beacons {
+    fn pillar(&mut self, player: &Player, pillar: Pillar) -> CommandResult {
+        let base = player.block_pos().offset(2, 0, 0);
+        let block = pillar.block.unwrap_or_else(|| "glowstone".into());
+        world::set_blocks(
+            &player.dimension,
+            (0..i32::from(pillar.height)).map(|dy| (base.offset(0, dy, 0), block.clone())),
+        )?;
+        no_reply()
+    }
+}
+
+export_server_mod!(Beacons);
+```
+
+| Registration | Handler | Called |
+|---|---|---|
+| `command(name, f)` | `fn(&mut self, &Player, Args) -> CommandResult` | `/name ...` typed by a player |
+| `parsed_command(name, f)` | `fn(&mut self, &Player, T) -> CommandResult` | the same, with a `FromArgs` value |
+| `on_tick(f)`, `every(n, f)`, `every_seconds(n, f)` | as for client mods | server ticks |
+| `on_join(f)`, `on_leave(f)` | `fn(&mut self, &Player)` | a player joins or leaves |
+| `on_chat(f)` | `fn(&mut self, &Player, &str)` | a chat message a player sends |
+| `on_block_break(f)`, `on_block_place(f)` | `fn(&mut self, &Player, BlockPos, &BlockState)` | a player broke a block (the state is what was there) or placed one |
+
+### Commands with typed arguments
+
+A `#[derive(FromArgs)]` struct whose fields are numbers, `bool`, `String`, `BlockState`, `BlockPos` or `Player` (each also as `Option<_>`) becomes typed arguments: the player's chat box completes and colours them, and the server checks them before the mod runs, with vanilla's errors.
+
+| Field | Player types | Notes |
+|---|---|---|
+| `i8`, `i16`, `i32`, `u8`, `u16`, `u32` | a whole number | the type's range is enforced: `u8` refuses 300 |
+| `f32`, `f64` | a number | |
+| `bool` | `true` or `false` | |
+| `String`, `BlockState` | one word: letters, digits, `_ - . +` | `stone` means `minecraft:stone`; mark the last field `#[rest]` for free text |
+| `BlockPos` | `x y z`, each also `~` or `~n` | relative to the player |
+| `Player` | a name, `@s` or `@p` | |
+
+Enums with subcommands, and structs with other field types, are parsed from the text of the line instead, with the same messages as client commands.
+
+### Players and the world
+
+| Call | Does |
+|---|---|
+| `players::online()` | the players on the server, as of this hook |
+| `players::find(name)` | an online player by name, any case |
+| `player.tell(text)`, `players::tell(&player, text)` | a message to one player; false when they left |
+| `players::broadcast(text)` | a message to everyone and the server log |
+| `world::block(&dimension, pos)` | `Option<BlockState>`: none where no chunk is loaded |
+| `world::biome(&dimension, pos)` | the biome id |
+| `world::set_block(&dimension, pos, state)`, `world::set_blocks(&dimension, changes)` | changes blocks as `/setblock` does, after the hook returns |
+
+`world::set_blocks` takes any iterator of `(BlockPos, state)` and sends it in batches of 4096, the most Horizon takes in one call; it returns how many it sent. Changes are applied after the hook returns, so `world::block` still sees the old state during the same command. `BlockPos::cuboid(a, b)` walks every position of a box and `BlockPos::volume(a, b)` counts them. Players get at most 8 messages per hook call.
+
+`BlockState` wraps `minecraft:oak_log[axis=y]`: `id()` is `minecraft:oak_log`, `is("oak_log")` compares ids, `property("axis")` is `Some("y")`, `is_air()` covers every kind of air. `"stone".into()` is `minecraft:stone`.
+
+`storage`, `Config` and `log` work in server mods as in client mods; `game`, `hud`, `chat`, `command`, `ui` and `input` are client only.
+
+### Testing a server mod
+
+```rust
+let mut server = TestServer::<Builder>::start_in(
+    ServerWorld::default().with_block(BlockPos::new(1, 64, 1), "stone"),
+);
+server.join("Alex").join("Steve");
+assert_eq!(server.command("Alex", "pillar 3"), Ok(None));
+assert!(server.block(BlockPos::new(2, 66, 0)).is("glowstone"));
+assert_eq!(server.command("Alex", "pillar 300"), Err("Integer must not be more than 255, found 300".into()));
+server.break_block("Steve", BlockPos::new(1, 64, 1));
+assert_eq!(server.take_broadcasts(), ["..."]);
+```
+
+`TestServer` parses typed arguments as the server does (`~`, `@s`, ranges, vanilla's messages) and applies block changes after each call, as Horizon does. Players join at `0.5 64 0.5` in the overworld; `update_player(name, |p| ...)` moves them. It also has `leave`, `chat`, `place_block`, `tick`, `ticks`, `restart`, `block_in`, `set_block`, `take_told`, `take_log`, `file` and `file_text`. Unset blocks are air and the biome is `minecraft:plains`. In Horizon's sandbox, scripts use `join`, `as`, `break`, `place`, `blocks` and `expect.told`, `expect.broadcast`, `expect.blocks`: see `examples/builder`.
 
 ## Testing
 

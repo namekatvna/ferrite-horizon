@@ -1,0 +1,8 @@
+id = "builder"
+name = "Builder"
+version = "0.1.0"
+description = "Ferrite showcase: /pos1 and /pos2 select a box, /set fills it, /replace swaps one block for another, /undo takes the last change back."
+authors = ["namekatvna"]
+api = "0.3"
+side = "server"
+capabilities = ["players", "world"]

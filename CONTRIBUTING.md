@@ -19,7 +19,7 @@ Run what CI runs before opening a pull request:
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy -p ferrite-api -p hello -p compass -p keystrokes --target wasm32-unknown-unknown -- -D warnings
+cargo clippy -p ferrite-api -p hello -p compass -p keystrokes -p builder --target wasm32-unknown-unknown -- -D warnings
 cargo test --workspace
 cargo run -p cargo-ferrite -- ferrite doctor
 ```

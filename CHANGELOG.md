@@ -17,10 +17,16 @@ All notable changes to Ferrite are listed here. The format follows [Keep a Chang
 - Page handlers accept any closure, including ones that capture values.
 - `input`: mod keys rebindable in Options > Mods (`key`, `on_key`, `on_key_press`, `on_key_release`, `input::is_down`), the mouse wheel (`on_scroll`, `input::capture_scroll`), claimed items (`on_item_use`, `on_item_release`), the held item, vanilla controls and clicks per second. Short key names (`"c"`, `"left.shift"`).
 - Example mod `keystrokes`.
+- Server mods: `server::ServerMod`, `ServerHooks` (commands, ticks, timers, joins, leaves, chat, broken and placed blocks), `export_server_mod!`, `server::players`, `server::world` with batched `set_blocks`, `BlockState`, `Player`, and `cargo ferrite new --server`.
+- `#[derive(FromArgs)]` structs become typed server arguments (numbers with their type's range, `bool`, words, `BlockState`, `BlockPos` with `~`, `Player`); `BlockPos` fields read three numbers in client commands.
+- `BlockPos::cuboid`, `volume` and `neighbors`.
+- `testing::TestServer` and `ServerWorld`.
+- Example mod `builder`.
 - `testing::TestGame`: run a mod in `cargo test` against a fake game.
 - `cargo ferrite new | build | test | run | check | doctor`.
 - Example mods `hello` and `compass`, the modding guide and CI.
 
 ### Changed
 
+- The release profile of the workspace and of new mods adds `codegen-units = 1` and `strip = true`: mods are 14–17% smaller.
 - **Breaking:** registering `on_tick`, `on_frame`, `on_chat` or `on_screen_closed` again adds a handler instead of replacing the previous one.

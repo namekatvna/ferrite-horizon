@@ -26,7 +26,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo clippy -p ferrite-api -p hello -p compass -p keystrokes --target wasm32-unknown-unknown -- -D warnings
+      - run: cargo clippy -p ferrite-api -p hello -p compass -p keystrokes -p builder --target wasm32-unknown-unknown -- -D warnings
 
   test:
     strategy:
@@ -72,10 +72,11 @@ jobs:
             [ -f "$dir/horizon-mod.toml" ] || continue
             (cd "$dir" && cargo ferrite test)
           done
-      - name: A new mod builds and passes its tests
+      - name: New client and server mods build and pass their tests
         run: |
           cd "$RUNNER_TEMP"
           cargo ferrite new ci-probe --ferrite-path "$GITHUB_WORKSPACE"
-          cd ci-probe
-          cargo test
-          cargo ferrite test
+          cargo ferrite new ci-server-probe --server --ferrite-path "$GITHUB_WORKSPACE"
+          for dir in ci-probe ci-server-probe; do
+            (cd "$dir" && cargo test && cargo ferrite test)
+          done

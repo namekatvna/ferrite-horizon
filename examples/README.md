@@ -7,3 +7,4 @@ Demo mods built with `ferrite-api`. Each one is its own crate (`cdylib`, target 
 | `hello` | commands, a tick handler, chat |
 | `compass` | HUD panel, game state, `Config`, `#[derive(FromArgs)]` commands, a settings page from `#[derive(Settings)]` |
 | `keystrokes` | mod keys, holding a key, the mouse wheel, vanilla controls and clicks per second |
+| `builder` | a server mod: typed commands with `~` positions, per-player state, `world::set_blocks`, undo |

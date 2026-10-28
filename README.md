@@ -77,8 +77,9 @@ export_mod!(Hud);
 | **Settings** | `Config<T>`: JSON settings that survive new and removed fields and broken files |
 | **UI** | a settings page in Options > Mods and the mod's own screens, with handlers bound to widgets; `#[derive(Settings)]` builds the page from the config struct |
 | **Input** | the mod's own keys (rebindable by the player), the mouse wheel, claimed items, vanilla controls |
+| **Server mods** | joins, chat, broken and placed blocks, commands whose typed arguments come from a `#[derive(FromArgs)]` struct, world edits in any size |
 | **Storage** | typed key/value data per mod |
-| **Testing** | `TestGame` runs the mod in `cargo test` against a fake game; `cargo ferrite test` in Horizon's sandbox |
+| **Testing** | `TestGame` and `TestServer` run the mod in `cargo test` against a fake game or server; `cargo ferrite test` in Horizon's sandbox |
 | **Tooling** | `cargo ferrite new / build / test / run / check / doctor` |
 
 ## Quick start
@@ -105,7 +106,7 @@ Read the [modding guide](docs/guide.md) next; [`examples/`](examples) has comple
 | `crates/ferrite-api` | the API mods depend on |
 | `crates/ferrite-macros` | `#[derive(FromArgs)]` |
 | `crates/cargo-ferrite` | the `cargo ferrite` command |
-| `examples/` | `hello`, `compass` and `keystrokes` |
+| `examples/` | `hello`, `compass`, `keystrokes` and the server mod `builder` |
 | `docs/` | the guide and the list of features Horizon does not offer yet |
 
 Changes are listed in [CHANGELOG.md](CHANGELOG.md). To work on Ferrite itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
