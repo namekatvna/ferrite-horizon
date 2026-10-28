@@ -96,6 +96,8 @@ pub(crate) mod fake {
         with(|f| f.log.push((level, message.to_owned())));
     }
 
+    pub(crate) fn forget_snapshot() {}
+
     pub(crate) fn chat_show(text: &str) {
         with(|f| f.chat.push(text.to_owned()));
     }

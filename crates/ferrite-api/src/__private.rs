@@ -1,5 +1,5 @@
 use crate::ui::{self, Page, PageBuilder, SCREEN_IDS, ScreenRequest};
-use crate::{Args, Hooks, Mod};
+use crate::{Args, Hooks, Mod, host};
 
 pub mod sdk {
     wit_bindgen::generate!({
@@ -30,6 +30,7 @@ pub struct Adapter<M> {
 
 impl<M: Mod> Adapter<M> {
     pub fn init() -> Result<(Self, sdk::Registration), String> {
+        host::forget_snapshot();
         let mut hooks = Hooks::new();
         let inner = M::init(&mut hooks).map_err(crate::Error::into_message)?;
         let registration = hooks.registration();
@@ -41,7 +42,7 @@ impl<M: Mod> Adapter<M> {
             screen: None,
         };
         adapter.refresh_settings(true);
-        adapter.flush_ui();
+        adapter.flush_ui(false);
         Ok((adapter, registration))
     }
 
@@ -50,8 +51,9 @@ impl<M: Mod> Adapter<M> {
     }
 
     pub fn tick(&mut self, tick: u64) {
+        host::forget_snapshot();
         self.ticks += 1;
-        if let Some(handler) = self.hooks.tick {
+        for handler in &self.hooks.tick {
             handler(&mut self.inner, tick);
         }
         for &(interval, handler) in &self.hooks.timers {
@@ -59,34 +61,38 @@ impl<M: Mod> Adapter<M> {
                 handler(&mut self.inner);
             }
         }
-        self.flush_ui();
+        self.flush_ui(false);
     }
 
     pub fn frame(&mut self, seconds: f32) {
-        if let Some(handler) = self.hooks.frame {
+        host::forget_snapshot();
+        for handler in &self.hooks.frame {
             handler(&mut self.inner, seconds);
         }
-        self.flush_ui();
+        self.flush_ui(false);
     }
 
     pub fn command(&mut self, name: &str, args: &str) -> Result<Option<String>, String> {
+        host::forget_snapshot();
         let result = match self.hooks.find_command(name) {
             Some(handler) => handler(&mut self.inner, Args::for_command(name, args))
                 .map_err(crate::Error::into_message),
             None => Err(format!("Unknown command /{name}")),
         };
-        self.flush_ui();
+        self.flush_ui(true);
         result
     }
 
     pub fn chat(&mut self, text: &str) {
-        if let Some(handler) = self.hooks.chat {
+        host::forget_snapshot();
+        for handler in &self.hooks.chat {
             handler(&mut self.inner, text);
         }
-        self.flush_ui();
+        self.flush_ui(true);
     }
 
     pub fn ui_select(&mut self, id: u32, row: u32) {
+        host::forget_snapshot();
         let acted = match id.checked_sub(SCREEN_IDS) {
             Some(index) => self
                 .screen
@@ -97,32 +103,30 @@ impl<M: Mod> Adapter<M> {
                 .as_ref()
                 .is_some_and(|page| page.activate(&mut self.inner, id, row)),
         };
-        self.flush_ui();
-        if acted {
-            self.refresh_settings(false);
-            self.refresh_screen();
-        }
+        self.flush_ui(acted);
     }
 
     pub fn ui_closed(&mut self) {
-        if self.screen.take().is_some()
-            && let Some(handler) = self.hooks.screen_closed
-        {
-            handler(&mut self.inner);
+        host::forget_snapshot();
+        if self.screen.take().is_some() {
+            for handler in &self.hooks.screen_closed {
+                handler(&mut self.inner);
+            }
         }
-        self.flush_ui();
+        self.flush_ui(true);
     }
 
     pub fn ui_settings_opened(&mut self) {
+        host::forget_snapshot();
         self.refresh_settings(true);
-        self.flush_ui();
+        self.flush_ui(false);
     }
 
-    fn flush_ui(&mut self) {
-        let requests = ui::take_requests();
+    fn flush_ui(&mut self, refresh: bool) {
         let Some(host) = ui::active_host() else {
             return;
         };
+        let requests = ui::take_requests();
         match requests.screen {
             Some(ScreenRequest::Open(builder)) => {
                 if let Ok(builder) = builder.downcast::<PageBuilder<M>>() {
@@ -142,7 +146,7 @@ impl<M: Mod> Adapter<M> {
             }
             None => {}
         }
-        if requests.refresh {
+        if refresh || requests.refresh {
             self.refresh_settings(false);
             self.refresh_screen();
         }

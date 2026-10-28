@@ -5,6 +5,14 @@ use crate::Error;
 
 pub type CommandResult = Result<Option<String>, Error>;
 
+pub fn reply(text: impl Into<String>) -> CommandResult {
+    Ok(Some(text.into()))
+}
+
+pub fn no_reply() -> CommandResult {
+    Ok(None)
+}
+
 pub trait FromArgs: Sized {
     const USAGE: &'static str;
 

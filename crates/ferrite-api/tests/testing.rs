@@ -204,6 +204,87 @@ fn storage_quota_is_enforced() {
     assert!(game.command("corner top-right").is_err());
 }
 
+#[derive(FromArgs)]
+enum Volume {
+    Up { steps: u8 },
+    Mute,
+}
+
+#[derive(Default)]
+struct Features {
+    level: u8,
+    log_ticks: u32,
+    hud_ticks: u32,
+    saved: Option<Config<Settings>>,
+}
+
+impl Mod for Features {
+    fn init(hooks: &mut Hooks<Self>) -> Result<Self, Error> {
+        hooks
+            .on_tick(|m, _| m.log_ticks += 1)
+            .on_tick(|m, _| m.hud_ticks += 1)
+            .parsed_command("volume", Self::volume)
+            .command("greeting", Self::greeting);
+        Ok(Self {
+            saved: Some(Config::load()),
+            ..Self::default()
+        })
+    }
+}
+
+impl Features {
+    fn volume(&mut self, volume: Volume) -> CommandResult {
+        match volume {
+            Volume::Up { steps } => self.level = self.level.saturating_add(steps),
+            Volume::Mute => return no_reply(),
+        }
+        reply(format!("Volume {}", self.level))
+    }
+
+    fn greeting(&mut self, args: Args) -> CommandResult {
+        let text = args.rest(0).to_owned();
+        let saved = self.saved.as_mut().ok_or("no config")?;
+        saved.edit(|s| s.greeting = text);
+        reply(format!("Greeting is {}", saved.greeting))
+    }
+}
+
+#[test]
+fn every_registered_handler_runs() {
+    let mut game = TestGame::<Features>::start();
+    game.ticks(3);
+    assert_eq!((game.state().log_ticks, game.state().hud_ticks), (3, 3));
+}
+
+#[test]
+fn parsed_commands_receive_the_parsed_value() {
+    let mut game = TestGame::<Features>::start();
+    assert_eq!(game.command("volume up 3"), Ok(Some("Volume 3".into())));
+    assert_eq!(game.command("volume mute"), Ok(None));
+    assert_eq!(
+        game.command("volume up"),
+        Err("Missing <steps>. Usage: /volume up <steps>".into())
+    );
+}
+
+#[test]
+fn edit_saves_and_logs_failures_instead_of_returning_them() {
+    let mut game = TestGame::<Features>::start();
+    assert_eq!(
+        game.command("greeting Hey"),
+        Ok(Some("Greeting is Hey".into()))
+    );
+    assert!(game.file_text("config.json").unwrap().contains("\"Hey\""));
+
+    game.update_world(|w| w.storage_quota = Some(8));
+    game.take_log();
+    assert_eq!(
+        game.command("greeting Yo"),
+        Ok(Some("Greeting is Yo".into()))
+    );
+    assert_eq!(game.take_log()[0].0, Level::Warn);
+}
+
 #[test]
 fn a_refused_start_reports_the_reason() {
     let err = TestGame::<Refuses>::try_start_in(World::default()).err();

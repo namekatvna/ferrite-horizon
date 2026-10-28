@@ -5,6 +5,8 @@ pub(crate) use wasm::*;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
+    use std::cell::{Cell, RefCell};
+
     use crate::__private::sdk::{chat, command, game, hud, log, storage, ui};
     use crate::game::{BlockPos, Clock, Hit, Player, Vec3};
     use crate::hud::{Corner, Line};
@@ -33,21 +35,45 @@ mod wasm {
         command::run_quiet(lines);
     }
 
+    thread_local! {
+        static PLAYER: RefCell<Option<Option<Player>>> = const { RefCell::new(None) };
+        static CLOCK: Cell<Option<Option<Clock>>> = const { Cell::new(None) };
+    }
+
+    pub(crate) fn forget_snapshot() {
+        PLAYER.with(|p| p.borrow_mut().take());
+        CLOCK.with(|c| c.set(None));
+    }
+
     pub(crate) fn player() -> Option<Player> {
-        game::get_player().map(|p| Player {
-            position: Vec3::new(p.x, p.y, p.z),
-            yaw: p.yaw,
-            pitch: p.pitch,
-            health: p.health,
-            food: p.food,
-            dimension: p.dimension.into(),
+        PLAYER.with(|cached| {
+            cached
+                .borrow_mut()
+                .get_or_insert_with(|| {
+                    game::get_player().map(|p| Player {
+                        position: Vec3::new(p.x, p.y, p.z),
+                        yaw: p.yaw,
+                        pitch: p.pitch,
+                        health: p.health,
+                        food: p.food,
+                        dimension: p.dimension.into(),
+                    })
+                })
+                .clone()
         })
     }
 
     pub(crate) fn clock() -> Option<Clock> {
-        game::get_clock().map(|c| Clock {
-            game_time: c.game_time,
-            day_time: c.day_time,
+        CLOCK.with(|cached| {
+            if let Some(clock) = cached.get() {
+                return clock;
+            }
+            let clock = game::get_clock().map(|c| Clock {
+                game_time: c.game_time,
+                day_time: c.day_time,
+            });
+            cached.set(Some(clock));
+            clock
         })
     }
 

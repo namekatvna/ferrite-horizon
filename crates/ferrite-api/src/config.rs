@@ -41,6 +41,14 @@ impl<T: Serialize + DeserializeOwned + Default> Config<T> {
         Ok(result)
     }
 
+    pub fn edit<R>(&mut self, change: impl FnOnce(&mut T) -> R) -> R {
+        let result = change(&mut self.value);
+        if let Err(error) = self.save() {
+            Host.warn(&format!("config: could not save {}: {error}", self.key));
+        }
+        result
+    }
+
     pub fn reset(&mut self) -> Result<(), StorageError> {
         self.value = T::default();
         self.save()
