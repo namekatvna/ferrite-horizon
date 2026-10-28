@@ -7,6 +7,9 @@ mod mod_trait;
 pub mod __private;
 
 pub mod chat;
+pub mod command;
+pub mod game;
+pub mod hud;
 pub mod log;
 
 pub use args::{Args, CommandResult};
@@ -17,7 +20,10 @@ pub use mod_trait::Mod;
 pub const API_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod prelude {
-    pub use crate::{Args, CommandResult, Error, Hooks, Mod, chat, export_mod, log};
+    pub use crate::hud::{Color, Corner, Panel};
+    pub use crate::{
+        Args, CommandResult, Error, Hooks, Mod, chat, command, export_mod, game, hud, log,
+    };
 }
 
 #[macro_export]
