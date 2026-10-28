@@ -1,3 +1,5 @@
+mod args;
+mod error;
 mod hooks;
 mod mod_trait;
 
@@ -7,13 +9,15 @@ pub mod __private;
 pub mod chat;
 pub mod log;
 
-pub use hooks::Hooks;
+pub use args::{Args, CommandResult};
+pub use error::Error;
+pub use hooks::{ChatHandler, CommandHandler, FrameHandler, Hooks, TickHandler};
 pub use mod_trait::Mod;
 
 pub const API_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod prelude {
-    pub use crate::{API_VERSION, Hooks, Mod, chat, export_mod, log};
+    pub use crate::{Args, CommandResult, Error, Hooks, Mod, chat, export_mod, log};
 }
 
 #[macro_export]

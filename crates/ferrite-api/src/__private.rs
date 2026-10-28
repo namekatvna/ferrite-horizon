@@ -1,35 +1,50 @@
 pub use horizon_mod_sdk as sdk;
 
-use crate::{Hooks, Mod};
+use crate::{Args, Hooks, Mod};
 
-pub struct Adapter<M>(M);
+pub struct Adapter<M> {
+    inner: M,
+    hooks: Hooks<M>,
+}
 
 impl<M: Mod> Adapter<M> {
     pub fn inner(&self) -> &M {
-        &self.0
+        &self.inner
     }
 }
 
 impl<M: Mod> sdk::Mod for Adapter<M> {
     fn init() -> Result<(Self, sdk::Registration), String> {
-        let mut hooks = Hooks::default();
-        let inner = M::init(&mut hooks)?;
-        Ok((Self(inner), hooks.into_registration()))
+        let mut hooks = Hooks::new();
+        let inner = M::init(&mut hooks).map_err(crate::Error::into_message)?;
+        let registration = hooks.registration();
+        Ok((Self { inner, hooks }, registration))
     }
 
     fn tick(&mut self, tick: u64) {
-        self.0.tick(tick)
+        if let Some(handler) = self.hooks.tick {
+            handler(&mut self.inner, tick)
+        }
     }
 
     fn frame(&mut self, seconds: f32) {
-        self.0.frame(seconds)
+        if let Some(handler) = self.hooks.frame {
+            handler(&mut self.inner, seconds)
+        }
     }
 
     fn command(&mut self, name: &str, args: &str) -> Result<Option<String>, String> {
-        self.0.command(name, args)
+        match self.hooks.find_command(name) {
+            Some(handler) => {
+                handler(&mut self.inner, Args::new(args)).map_err(crate::Error::into_message)
+            }
+            None => Err(format!("Unknown command /{name}")),
+        }
     }
 
     fn chat(&mut self, text: &str) {
-        self.0.chat(text)
+        if let Some(handler) = self.hooks.chat {
+            handler(&mut self.inner, text)
+        }
     }
 }
