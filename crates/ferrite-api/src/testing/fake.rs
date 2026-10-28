@@ -1,8 +1,9 @@
 use std::cell::RefCell;
 
-use super::{EYE_HEIGHT, Screen, World};
+use super::{EYE_HEIGHT, RegisteredKey, Screen, World};
 use crate::game::{Clock, Hit, Player, Vec3};
 use crate::hud::{Corner, Line, Panel};
+use crate::input::{Clicks, Control, ControlState, Event, HeldItem};
 use crate::log::Level;
 use crate::ui::Widget;
 
@@ -16,6 +17,69 @@ pub(super) struct Fake {
     pub(super) panel: Option<Panel>,
     pub(super) settings: Vec<Widget>,
     pub(super) screen: Option<Screen>,
+    pub(super) keys: Vec<RegisteredKey>,
+    pub(super) claimed_items: Vec<String>,
+    pub(super) scroll_captured: bool,
+    pub(super) events: Vec<Event>,
+}
+
+pub(crate) fn input_register_key(name: &str, label: &str, key: &str) -> Result<(), String> {
+    let known = ["key.keyboard.", "key.mouse."].iter().any(|prefix| {
+        key.strip_prefix(prefix)
+            .is_some_and(|rest| !rest.is_empty())
+    });
+    if !known {
+        return Err(format!("unknown key {key}"));
+    }
+    with(|f| {
+        f.keys.push(RegisteredKey {
+            name: name.to_owned(),
+            label: label.to_owned(),
+            key: key.to_owned(),
+        })
+    });
+    Ok(())
+}
+
+pub(crate) fn input_claim_items(items: &[String]) {
+    with(|f| f.claimed_items = items.to_vec());
+}
+
+pub(crate) fn input_claim_wheel(on: bool) {
+    with(|f| f.scroll_captured = on);
+}
+
+pub(crate) fn input_poll() -> Vec<Event> {
+    with(|f| std::mem::take(&mut f.events))
+}
+
+pub(crate) fn input_held() -> Option<HeldItem> {
+    with(|f| f.world.held_item.clone())
+}
+
+pub(crate) fn input_mapping(name: &str) -> Option<ControlState> {
+    let control = Control::ALL.into_iter().find(|c| c.id() == name)?;
+    let key = match control {
+        Control::Forward => "W",
+        Control::Left => "A",
+        Control::Back => "S",
+        Control::Right => "D",
+        Control::Jump => "Space",
+        Control::Sneak => "Left Shift",
+        Control::Sprint => "Left Control",
+        Control::Attack => "LMB",
+        Control::Use => "RMB",
+    };
+    with(|f| {
+        Some(ControlState {
+            key: key.to_owned(),
+            down: f.world.controls_down.contains(&control),
+        })
+    })
+}
+
+pub(crate) fn input_clicks() -> Clicks {
+    with(|f| f.world.clicks)
 }
 
 thread_local! {

@@ -11,5 +11,5 @@ pub mod sdk {
 
     pub use exports::horizon::mods::events::{Guest, Registration};
     pub use exports::horizon::mods::ui_events::Guest as UiEventsGuest;
-    pub use horizon::mods::{chat, command, game, hud, log, storage, ui};
+    pub use horizon::mods::{chat, command, game, hud, input, log, storage, ui};
 }

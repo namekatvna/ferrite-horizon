@@ -1,6 +1,22 @@
 use crate::__private::sdk;
+use crate::input::{self, Event};
 use crate::ui::{self, Page, PageBuilder, SCREEN_IDS, ScreenRequest};
 use crate::{Args, Hooks, Mod, host};
+
+fn register_input<M: 'static>(hooks: &Hooks<M>) -> Result<(), String> {
+    let Some(host) = input::active_host() else {
+        return Ok(());
+    };
+    for key in &hooks.keys {
+        (host.register_key)(&key.name, &key.label, &key.default)
+            .map_err(|e| format!("key `{}` ({}): {e}", key.name, key.default))?;
+    }
+    if !hooks.items.is_empty() {
+        let items: Vec<String> = hooks.items.iter().map(|i| i.item.clone()).collect();
+        (host.claim_items)(&items);
+    }
+    Ok(())
+}
 
 struct Screen<M> {
     builder: PageBuilder<M>,
@@ -20,6 +36,10 @@ impl<M: Mod> Adapter<M> {
         host::forget_snapshot();
         let mut hooks = Hooks::new();
         let inner = M::init(&mut hooks).map_err(crate::Error::into_message)?;
+        if !hooks.problems.is_empty() {
+            return Err(hooks.problems.join("; "));
+        }
+        register_input(&hooks)?;
         let registration = hooks.registration();
         let mut adapter = Self {
             inner,
@@ -39,6 +59,7 @@ impl<M: Mod> Adapter<M> {
 
     pub fn tick(&mut self, tick: u64) {
         host::forget_snapshot();
+        let acted = self.poll_input();
         self.ticks += 1;
         for handler in &self.hooks.tick {
             handler(&mut self.inner, tick);
@@ -48,15 +69,65 @@ impl<M: Mod> Adapter<M> {
                 handler(&mut self.inner);
             }
         }
-        self.flush_ui(false);
+        self.flush_ui(acted);
     }
 
     pub fn frame(&mut self, seconds: f32) {
         host::forget_snapshot();
+        let acted = self.poll_input();
         for handler in &self.hooks.frame {
             handler(&mut self.inner, seconds);
         }
-        self.flush_ui(false);
+        self.flush_ui(acted);
+    }
+
+    pub fn input(&mut self) {
+        host::forget_snapshot();
+        let acted = self.poll_input();
+        self.flush_ui(acted);
+    }
+
+    fn poll_input(&mut self) -> bool {
+        let Some(host) = input::active_host() else {
+            return false;
+        };
+        let events = (host.poll)();
+        for event in &events {
+            input::note(event);
+            match event {
+                Event::KeyDown(name) | Event::KeyUp(name) => {
+                    let Some(key) = self.hooks.keys.iter().find(|k| k.name == *name) else {
+                        continue;
+                    };
+                    let handlers = match event {
+                        Event::KeyDown(_) => &key.press,
+                        _ => &key.release,
+                    };
+                    for handler in handlers {
+                        handler(&mut self.inner);
+                    }
+                }
+                Event::Scroll(steps) => {
+                    for handler in &self.hooks.scroll {
+                        handler(&mut self.inner, *steps);
+                    }
+                }
+                Event::UseStart(using) | Event::UseStop(using) => {
+                    let Some(item) = self.hooks.items.iter().find(|i| i.item == using.item.id)
+                    else {
+                        continue;
+                    };
+                    let handlers = match event {
+                        Event::UseStart(_) => &item.start,
+                        _ => &item.stop,
+                    };
+                    for handler in handlers {
+                        handler(&mut self.inner, using);
+                    }
+                }
+            }
+        }
+        !events.is_empty()
     }
 
     pub fn command(&mut self, name: &str, args: &str) -> Result<Option<String>, String> {

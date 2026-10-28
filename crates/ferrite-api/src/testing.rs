@@ -5,6 +5,7 @@ use crate::__private::{Adapter, sdk::Registration};
 use crate::Mod;
 use crate::game::{Clock, Dimension, Hit, Player, Vec3};
 use crate::hud::Panel;
+use crate::input::{self, Clicks, Control, Event, HeldItem, ItemUse};
 use crate::log::Level;
 use crate::ui::{Widget, widget_id};
 
@@ -21,6 +22,9 @@ pub struct World {
     pub hit: Option<Hit>,
     pub storage: BTreeMap<String, Vec<u8>>,
     pub storage_quota: Option<usize>,
+    pub held_item: Option<HeldItem>,
+    pub controls_down: Vec<Control>,
+    pub clicks: Clicks,
 }
 
 impl Default for World {
@@ -31,8 +35,18 @@ impl Default for World {
             hit: None,
             storage: BTreeMap::new(),
             storage_quota: None,
+            held_item: None,
+            controls_down: Vec::new(),
+            clicks: Clicks::default(),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RegisteredKey {
+    pub name: String,
+    pub label: String,
+    pub key: String,
 }
 
 impl World {
@@ -72,6 +86,7 @@ pub struct TestGame<M: Mod> {
     adapter: Adapter<M>,
     registration: Registration,
     tick: u64,
+    using: Option<(HeldItem, u64)>,
 }
 
 impl<M: Mod> TestGame<M> {
@@ -95,6 +110,7 @@ impl<M: Mod> TestGame<M> {
             adapter,
             registration,
             tick: 0,
+            using: None,
         })
     }
 
@@ -110,9 +126,92 @@ impl<M: Mod> TestGame<M> {
             f.panel = None;
             f.settings.clear();
             f.screen = None;
+            f.keys.clear();
+            f.claimed_items.clear();
+            f.scroll_captured = false;
+            f.events.clear();
         });
+        self.using = None;
         (self.adapter, self.registration) = boot::<M>()?;
         Ok(())
+    }
+
+    pub fn keys(&self) -> Vec<RegisteredKey> {
+        with(|f| f.keys.clone())
+    }
+
+    pub fn claimed_items(&self) -> Vec<String> {
+        with(|f| f.claimed_items.clone())
+    }
+
+    pub fn is_scroll_captured(&self) -> bool {
+        with(|f| f.scroll_captured)
+    }
+
+    pub fn press_key(&mut self, name: &str) -> &mut Self {
+        self.key_event(name, Event::KeyDown(name.to_owned()))
+    }
+
+    pub fn release_key(&mut self, name: &str) -> &mut Self {
+        self.key_event(name, Event::KeyUp(name.to_owned()))
+    }
+
+    pub fn tap_key(&mut self, name: &str) -> &mut Self {
+        self.press_key(name).release_key(name)
+    }
+
+    pub fn scroll(&mut self, steps: f32) -> &mut Self {
+        if self.is_scroll_captured() {
+            self.send(Event::Scroll(steps));
+        }
+        self
+    }
+
+    pub fn start_using(&mut self, item: &str) -> &mut Self {
+        let id = input::item_id(item);
+        let held = with(|f| {
+            let held = match f.world.held_item.take() {
+                Some(held) if held.id == id => held,
+                _ => HeldItem {
+                    id: id.clone(),
+                    count: 1,
+                    slot: 0,
+                },
+            };
+            f.world.held_item = Some(held.clone());
+            held
+        });
+        if with(|f| f.claimed_items.contains(&id)) {
+            self.using = Some((held.clone(), self.tick));
+            self.send(Event::UseStart(ItemUse {
+                item: held,
+                ticks: 0,
+            }));
+        }
+        self
+    }
+
+    pub fn stop_using(&mut self) -> &mut Self {
+        if let Some((item, since)) = self.using.take() {
+            let ticks = u32::try_from(self.tick - since).unwrap_or(u32::MAX);
+            self.send(Event::UseStop(ItemUse { item, ticks }));
+        }
+        self
+    }
+
+    fn key_event(&mut self, name: &str, event: Event) -> &mut Self {
+        let keys = self.keys();
+        if !keys.iter().any(|k| k.name == name) {
+            let declared: Vec<&str> = keys.iter().map(|k| k.name.as_str()).collect();
+            panic!("the mod has no key `{name}`; it declared {declared:?}");
+        }
+        self.send(event)
+    }
+
+    fn send(&mut self, event: Event) -> &mut Self {
+        with(|f| f.events.push(event));
+        self.adapter.input();
+        self
     }
 
     pub fn state(&self) -> &M {
@@ -261,6 +360,7 @@ impl<M: Mod> TestGame<M> {
 fn boot<M: Mod>() -> Result<(Adapter<M>, Registration), String> {
     crate::hud::forget_shown();
     crate::ui::forget_state();
+    crate::input::forget_state();
     Adapter::<M>::init()
 }
 

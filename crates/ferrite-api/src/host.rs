@@ -7,11 +7,68 @@ pub(crate) use wasm::*;
 mod wasm {
     use std::cell::{Cell, RefCell};
 
-    use crate::__private::sdk::{chat, command, game, hud, log, storage, ui};
+    use crate::__private::sdk::{chat, command, game, hud, input, log, storage, ui};
     use crate::game::{BlockPos, Clock, Hit, Player, Vec3};
     use crate::hud::{Corner, Line};
+    use crate::input::{Clicks, ControlState, Event, HeldItem, ItemUse};
     use crate::log::Level;
     use crate::ui::{Widget, widget_id};
+
+    pub(crate) fn input_register_key(name: &str, label: &str, key: &str) -> Result<(), String> {
+        input::register_key(name, label, key)
+    }
+
+    pub(crate) fn input_claim_items(items: &[String]) {
+        input::claim_items(items);
+    }
+
+    pub(crate) fn input_claim_wheel(on: bool) {
+        input::claim_wheel(on);
+    }
+
+    pub(crate) fn input_poll() -> Vec<Event> {
+        input::poll()
+            .into_iter()
+            .map(|event| match event {
+                input::Event::KeyDown(name) => Event::KeyDown(name),
+                input::Event::KeyUp(name) => Event::KeyUp(name),
+                input::Event::Wheel(steps) => Event::Scroll(steps),
+                input::Event::UseStart(using) => Event::UseStart(item_use(using)),
+                input::Event::UseStop(using) => Event::UseStop(item_use(using)),
+            })
+            .collect()
+    }
+
+    pub(crate) fn input_held() -> Option<HeldItem> {
+        input::held().map(held_item)
+    }
+
+    pub(crate) fn input_mapping(name: &str) -> Option<ControlState> {
+        input::mapping(name).map(|m| ControlState {
+            key: m.label,
+            down: m.down,
+        })
+    }
+
+    pub(crate) fn input_clicks() -> Clicks {
+        let (attack, use_item) = input::clicks_per_second();
+        Clicks { attack, use_item }
+    }
+
+    fn held_item(item: input::HeldItem) -> HeldItem {
+        HeldItem {
+            id: item.id,
+            count: item.count,
+            slot: item.slot,
+        }
+    }
+
+    fn item_use(using: input::ItemUse) -> ItemUse {
+        ItemUse {
+            item: held_item(using.item),
+            ticks: using.ticks,
+        }
+    }
 
     pub(crate) fn log(level: Level, message: &str) {
         let level = match level {
