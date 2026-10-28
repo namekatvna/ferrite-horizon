@@ -123,3 +123,79 @@ impl Compass {
 }
 
 export_mod!(Compass);
+
+#[cfg(test)]
+mod tests {
+    use ferrite_api::testing::{TestGame, World};
+
+    use super::*;
+
+    #[test]
+    fn panel_follows_the_player_and_the_clock() {
+        let mut game = TestGame::<Compass>::start();
+        game.update_world(|w| {
+            w.player.as_mut().unwrap().yaw = 180.0;
+            w.clock.as_mut().unwrap().day_time = 13_000;
+        })
+        .tick();
+        assert_eq!(
+            game.panel_lines(),
+            ["XYZ 0 64 0", "Facing North", "Overworld 19:00"]
+        );
+
+        game.update_world(|w| *w = World::title_screen()).tick();
+        assert_eq!(game.panel(), None);
+    }
+
+    #[test]
+    fn settings_page_edits_the_saved_config() {
+        let mut game = TestGame::<Compass>::start();
+        assert_eq!(
+            game.settings(),
+            [
+                ui::Widget::Button {
+                    label: "Visible: ON".into()
+                },
+                ui::Widget::Button {
+                    label: "Corner: top-left".into()
+                },
+                ui::Widget::Button {
+                    label: "Reset".into()
+                },
+            ]
+        );
+
+        game.click_setting("Corner").click_setting("Corner").tick();
+        assert_eq!(game.panel().unwrap().corner(), Corner::BottomLeft);
+        assert!(
+            game.file_text("config.json")
+                .unwrap()
+                .contains("bottom-left")
+        );
+
+        game.click_setting("Visible").tick();
+        assert_eq!(game.panel(), None);
+
+        game.restart().tick();
+        assert_eq!(game.panel(), None);
+        game.click_setting("Reset").tick();
+        assert_eq!(game.panel().unwrap().corner(), Corner::TopLeft);
+    }
+
+    #[test]
+    fn commands_and_the_page_stay_in_sync() {
+        let mut game = TestGame::<Compass>::start();
+        assert_eq!(
+            game.command("compass corner bottom-right"),
+            Ok(Some("Compass moved to bottom-right".into()))
+        );
+        game.open_settings();
+        assert!(game.settings().contains(&ui::Widget::Button {
+            label: "Corner: bottom-right".into()
+        }));
+
+        game.command("day").unwrap();
+        assert_eq!(game.take_commands(), ["time set day"]);
+        assert_eq!(game.take_chat(), ["Good morning!"]);
+    }
+}

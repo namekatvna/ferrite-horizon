@@ -23,3 +23,21 @@ impl %type% {
 }
 
 export_mod!(%type%);
+
+#[cfg(test)]
+mod tests {
+    use ferrite_api::testing::TestGame;
+
+    use super::*;
+
+    #[test]
+    fn hello_greets_and_counts_ticks() {
+        let mut game = TestGame::<%type%>::start();
+        game.ticks(20);
+        assert_eq!(
+            game.command("hello Steve"),
+            Ok(Some("20 ticks since load".into()))
+        );
+        assert_eq!(game.take_chat(), ["Hello, Steve!"]);
+    }
+}

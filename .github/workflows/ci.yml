@@ -77,4 +77,5 @@ jobs:
           cd "$RUNNER_TEMP"
           cargo ferrite new ci-probe --ferrite-path "$GITHUB_WORKSPACE"
           cd ci-probe
+          cargo test
           cargo ferrite test
