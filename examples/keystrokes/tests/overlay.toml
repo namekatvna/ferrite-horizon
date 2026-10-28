@@ -1,0 +1,7 @@
+[[step]]
+expect.commands = []
+
+[[step]]
+ticks = 1
+expect.corner = "top-right"
+expect.panel = ["?", "? ? ?", "?", "0 | 0 CPS"]

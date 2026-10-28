@@ -1,0 +1,9 @@
+id = "keystrokes"
+name = "Keystrokes"
+version = "0.1.0"
+description = "Ferrite showcase: the movement keys and clicks per second in a corner. K shows or hides it; hold Left Alt and scroll to move it."
+authors = ["namekatvna"]
+api = "0.1"
+side = "client"
+capabilities = ["hud", "storage", "input", "ui"]
+experimental = ["input", "ui"]

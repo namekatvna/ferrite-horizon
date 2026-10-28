@@ -54,6 +54,7 @@ capabilities = ["chat"]
 | `storage`, `Config` | `storage` |
 | `command` | `command` |
 | `ui`, `hooks.settings` | `ui`, also listed in `experimental = ["ui"]` |
+| `input`, `hooks.key`, `on_scroll`, `on_item_use` | `input`, also listed in `experimental = ["input"]` |
 
 ## A complete mod
 
@@ -378,6 +379,48 @@ This shows `Show coords: ON`, `Corner: Top left`, `Speed: Slow`, `Radius: 16` an
 | `#[setting(skip)]` | nothing |
 
 `#[setting(label = "...")]` replaces the label made from the field name (`show_coords` → `Show coords`), and `#[choice(label = "...")]` the one made from a variant name. `Choice` needs `Clone` and `PartialEq`. A field of another type without `options`, `range` or `skip` is a compile error that points at the field and says which of these to add.
+
+## Keys, the mouse wheel and items (`input`)
+
+Experimental: needs `capabilities = ["input"]` and `experimental = ["input"]` in `horizon-mod.toml`.
+
+```rust
+hooks
+    .on_key("menu", "Open waypoints", "m", Self::open_menu)
+    .key("zoom", "Zoom (hold)", "c")
+    .on_key_press("zoom", |_| input::capture_scroll(true))
+    .on_key_release("zoom", |_| input::capture_scroll(false))
+    .on_scroll(|m, steps| m.zoom += steps)
+    .on_item_use("spyglass", |m, using| m.aim(using.item.slot))
+    .on_item_release("spyglass", |m, using| m.fire(using.ticks));
+
+fn tick(&mut self, _tick: u64) {
+    if input::is_down("zoom") { ... }
+}
+```
+
+| Registration | Handler | Called |
+|---|---|---|
+| `key(name, label, default)` | none | declares a key; read it with `input::is_down(name)` |
+| `on_key(name, label, default, f)` | `fn(&mut self)` | declares a key and runs `f` when it goes down |
+| `on_key_press(name, f)`, `on_key_release(name, f)` | `fn(&mut self)` | the declared key goes down, comes up |
+| `on_scroll(f)` | `fn(&mut self, f32)` | wheel steps, positive away from the player, while the mod captures the wheel |
+| `on_item_use(item, f)`, `on_item_release(item, f)` | `fn(&mut self, &ItemUse)` | the use button goes down or up with that item in the main hand |
+
+Each key appears on the mod's page in Options > Mods with its `label`; the player can bind another key there, and that one wins. `name` is how the mod refers to the key. `default` is a short key name: `"c"`, `"f6"`, `"left.shift"`, `"space"` mean `key.keyboard.<name>`; a name starting with `key.` is used as is (`"key.mouse.middle"`). A mod has at most 16 keys and claims at most 64 items; items without a namespace are `minecraft:` items.
+
+Claiming an item takes its use away from the game: no placing, eating or swinging while the mod handles it. `ItemUse` has the `item` (`id`, `count`, hotbar `slot`) and `ticks`, how long the button was held (0 when it goes down). `input::capture_scroll(true)` takes the mouse wheel from the hotbar until `capture_scroll(false)` or the mod stops.
+
+| Query | Returns |
+|---|---|
+| `input::is_down(name)` | whether the mod's key is held now |
+| `input::held_item()` | `Option<HeldItem>` in the main hand |
+| `input::control(Control::Jump)` | `Option<ControlState>`: the bound key's name (`"Space"`) and whether it is down, for `Forward`, `Left`, `Back`, `Right`, `Jump`, `Sneak`, `Sprint`, `Attack`, `Use` |
+| `input::clicks_per_second()` | `Clicks { attack, use_item }` over the last second |
+
+Events arrive once a tick (and once a frame for mods with `on_frame`), before the tick handlers, so `is_down` is current in `on_tick`. A screen opening releases every held key. Mistakes in `init` — a key declared twice, a handler for an undeclared key, an unknown key name, too many keys — stop the mod with a message naming the problem.
+
+In tests, `press_key(name)`, `release_key(name)`, `tap_key(name)`, `scroll(steps)`, `start_using(item)` and `stop_using()` run the handlers at once; `World` has `held_item`, `controls_down` and `clicks`; `keys()`, `claimed_items()` and `is_scroll_captured()` show what the mod registered. Horizon's sandbox has no key bindings, so `input::control` returns `None` in `cargo ferrite test`.
 
 ## Data (`storage`)
 

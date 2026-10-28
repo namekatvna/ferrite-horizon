@@ -26,7 +26,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo clippy -p ferrite-api -p hello -p compass --target wasm32-unknown-unknown -- -D warnings
+      - run: cargo clippy -p ferrite-api -p hello -p compass -p keystrokes --target wasm32-unknown-unknown -- -D warnings
 
   test:
     strategy:

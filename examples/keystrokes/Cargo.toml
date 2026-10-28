@@ -1,0 +1,15 @@
+[package]
+name = "keystrokes"
+description = "Ferrite showcase: an overlay of the movement keys and clicks per second, with mod keys and the mouse wheel."
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ferrite-api.workspace = true
+serde = { workspace = true, features = ["derive"] }

@@ -15,6 +15,8 @@ All notable changes to Ferrite are listed here. The format follows [Keep a Chang
 - `#[derive(Settings)]` and `Page::config` / `Page::fields`: a settings page built from a config struct, with `#[setting(label, options, range, step, skip)]`.
 - `#[derive(Choice)]` and `Page::choice` for enums picked on a page; `Corner` implements `Choice`.
 - Page handlers accept any closure, including ones that capture values.
+- `input`: mod keys rebindable in Options > Mods (`key`, `on_key`, `on_key_press`, `on_key_release`, `input::is_down`), the mouse wheel (`on_scroll`, `input::capture_scroll`), claimed items (`on_item_use`, `on_item_release`), the held item, vanilla controls and clicks per second. Short key names (`"c"`, `"left.shift"`).
+- Example mod `keystrokes`.
 - `testing::TestGame`: run a mod in `cargo test` against a fake game.
 - `cargo ferrite new | build | test | run | check | doctor`.
 - Example mods `hello` and `compass`, the modding guide and CI.
