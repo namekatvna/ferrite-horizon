@@ -6,8 +6,20 @@ Ferrite mods are Rust crates compiled to WebAssembly and run by Horizon in a san
 
 ```sh
 rustup target add wasm32-unknown-unknown
-cargo install --git https://github.com/horizon-rust/horizon cargo-horizon-mod
+cargo install --git https://github.com/horizon-rust/horizon --rev cba52f4e5d7f99c592a26823fe8727beafe6ebff cargo-horizon-mod
+cargo install --git https://github.com/namekatvna/ferrite-horizon cargo-ferrite
+cargo ferrite doctor
 ```
+
+Create a mod:
+
+```sh
+cargo ferrite new my-mod
+cd my-mod
+cargo ferrite test
+```
+
+This makes a crate with a `/hello` command, its manifest and a test script. `--name "My Mod"` sets the display name. `--ferrite-path <dir>` uses a local Ferrite checkout instead of git. Inside a Cargo workspace the mod reuses the workspace's `ferrite-api` dependency; add it to the workspace members.
 
 `Cargo.toml`:
 
@@ -20,10 +32,10 @@ ferrite-api = { git = "https://github.com/namekatvna/ferrite-horizon" }
 serde = { version = "1", features = ["derive"] }
 ```
 
-`horizon-mod.toml` lists what the mod may do. Horizon refuses a mod that uses an API whose capability is missing here.
+`horizon-mod.toml` lists what the mod may do. Horizon refuses a mod that uses an API whose capability is missing here. The id uses lowercase letters, digits and `_`.
 
 ```toml
-id = "my-mod"
+id = "my_mod"
 name = "My Mod"
 version = "0.1.0"
 description = "What it does."
@@ -77,10 +89,12 @@ export_mod!(Greeter);
 Build, test and play:
 
 ```sh
-cargo horizon-mod build
-cargo horizon-mod test
-cargo horizon-mod run --game <path to horizon-client>
+cargo ferrite build
+cargo ferrite test
+cargo ferrite run --game <path to horizon-client>
 ```
+
+These run `cargo horizon-mod` with the same arguments.
 
 Or copy `target/horizon-mod/<id>.hmod` into `horizon-mods/` next to the game's `options.txt` and turn it on in Options > Mods. Every mod is off until turned on.
 
@@ -295,7 +309,7 @@ log::warn("...");
 
 ## Testing
 
-Unit-test plain Rust logic with `cargo test`. Test the mod as the game runs it with `cargo horizon-mod test`, which plays `tests/*.toml` scripts in Horizon's sandbox:
+Unit-test plain Rust logic with `cargo test`. Test the mod as the game runs it with `cargo ferrite test`, which plays `tests/*.toml` scripts in Horizon's sandbox:
 
 ```toml
 player = { x = 0.5, y = 64.0, z = 0.5, yaw = 180.0 }
