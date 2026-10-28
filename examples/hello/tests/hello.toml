@@ -1,0 +1,20 @@
+[[step]]
+expect.commands = ["hello", "ticks"]
+
+[[step]]
+command = "hello"
+expect.chat = ["Hello, world!"]
+
+[[step]]
+command = "hello Steve"
+expect.chat = ["Hello, Steve!"]
+
+[[step]]
+ticks = 20
+command = "ticks"
+expect.feedback = "20 ticks since load"
+
+[[step]]
+ticks = 5
+command = "ticks"
+expect.feedback = "25 ticks since load"

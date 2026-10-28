@@ -4,4 +4,5 @@ version = "0.1.0"
 description = "Minimal Ferrite mod: /hello greets the player, /ticks counts game ticks."
 authors = ["namekatvna"]
 api = "0.1"
+side = "client"
 capabilities = ["chat"]
