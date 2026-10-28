@@ -38,15 +38,23 @@ expect.corner = "top-left"
 
 [[step]]
 command = "compass corner middle"
-expect.error = "Invalid argument #2 `middle`: expected top-left, top-right, bottom-left or bottom-right"
+expect.error = "Invalid <corner> `middle`: expected top-left, top-right, bottom-left or bottom-right"
 
 [[step]]
 command = "compass corner"
-expect.error = "Missing argument #2"
+expect.error = "Missing <corner>. Usage: /compass corner <corner>"
 
 [[step]]
 command = "compass spin"
-expect.error = "Unknown option `spin`: use toggle, corner or reset"
+expect.error = "Unknown option `spin`. Usage: /compass toggle | corner <corner> | reset"
+
+[[step]]
+command = "compass reset now"
+expect.error = "Unexpected `now`. Usage: /compass reset"
+
+[[step]]
+command = "compass TOGGLE"
+expect.feedback = "Compass off"
 
 [[step]]
 command = "day"

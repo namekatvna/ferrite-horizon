@@ -16,6 +16,16 @@ impl Default for Settings {
     }
 }
 
+#[derive(FromArgs)]
+enum CompassCommand {
+    #[default]
+    Toggle,
+    Corner {
+        corner: Corner,
+    },
+    Reset,
+}
+
 struct Compass {
     settings: Config<Settings>,
 }
@@ -59,8 +69,8 @@ impl Compass {
     }
 
     fn compass(&mut self, args: Args) -> CommandResult {
-        match args.word(0).unwrap_or("toggle") {
-            "toggle" => {
+        match args.parse()? {
+            CompassCommand::Toggle => {
                 let visible = self.settings.update(|s| {
                     s.visible = !s.visible;
                     s.visible
@@ -70,16 +80,14 @@ impl Compass {
                     if visible { "on" } else { "off" }
                 )))
             }
-            "corner" => {
-                let corner: Corner = args.get(1)?;
+            CompassCommand::Corner { corner } => {
                 self.settings.update(|s| s.corner = corner)?;
                 Ok(Some(format!("Compass moved to {corner}")))
             }
-            "reset" => {
+            CompassCommand::Reset => {
                 self.settings.reset()?;
                 Ok(Some("Compass settings reset".into()))
             }
-            other => Err(format!("Unknown option `{other}`: use toggle, corner or reset").into()),
         }
     }
 
