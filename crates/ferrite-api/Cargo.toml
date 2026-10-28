@@ -10,3 +10,4 @@ authors.workspace = true
 
 [dependencies]
 ferrite-macros.workspace = true
+horizon-mod-sdk.workspace = true
