@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::__private::sdk::Registration;
+use crate::ui::PageBuilder;
 use crate::{Args, CommandResult};
 
 pub type CommandHandler<M> = for<'a> fn(&mut M, Args<'a>) -> CommandResult;
@@ -8,6 +9,7 @@ pub type TickHandler<M> = fn(&mut M, u64);
 pub type FrameHandler<M> = fn(&mut M, f32);
 pub type ChatHandler<M> = for<'a> fn(&mut M, &'a str);
 pub type TimerHandler<M> = fn(&mut M);
+pub type ScreenClosedHandler<M> = fn(&mut M);
 
 pub const TICKS_PER_SECOND: u64 = 20;
 
@@ -17,6 +19,8 @@ pub struct Hooks<M> {
     pub(crate) timers: Vec<(u64, TimerHandler<M>)>,
     pub(crate) frame: Option<FrameHandler<M>>,
     pub(crate) chat: Option<ChatHandler<M>>,
+    pub(crate) settings: Option<PageBuilder<M>>,
+    pub(crate) screen_closed: Option<ScreenClosedHandler<M>>,
 }
 
 impl<M> Hooks<M> {
@@ -27,7 +31,20 @@ impl<M> Hooks<M> {
             timers: Vec::new(),
             frame: None,
             chat: None,
+            settings: None,
+            screen_closed: None,
         }
+    }
+
+    pub fn settings(&mut self, builder: PageBuilder<M>) -> &mut Self {
+        crate::ui::use_host();
+        self.settings = Some(builder);
+        self
+    }
+
+    pub fn on_screen_closed(&mut self, handler: ScreenClosedHandler<M>) -> &mut Self {
+        self.screen_closed = Some(handler);
+        self
     }
 
     pub fn command(&mut self, name: impl Into<String>, handler: CommandHandler<M>) -> &mut Self {
@@ -96,6 +113,8 @@ impl<M> fmt::Debug for Hooks<M> {
             )
             .field("frame", &self.frame.is_some())
             .field("chat", &self.chat.is_some())
+            .field("settings", &self.settings.is_some())
+            .field("screen_closed", &self.screen_closed.is_some())
             .finish()
     }
 }

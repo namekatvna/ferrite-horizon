@@ -1,3 +1,4 @@
+use crate::ui::{self, Page, PageBuilder, SCREEN_IDS, ScreenRequest};
 use crate::{Args, Hooks, Mod};
 
 pub mod sdk {
@@ -11,13 +12,25 @@ pub mod sdk {
 
     pub use exports::horizon::mods::events::{Guest, Registration};
     pub use exports::horizon::mods::ui_events::Guest as UiEventsGuest;
-    pub use horizon::mods::{chat, command, game, hud, log, storage};
+    pub use horizon::mods::{chat, command, game, hud, log, storage, ui};
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use crate::ui::take_host_calls as take_ui_calls;
+
+pub const SCREEN_WIDGET_IDS: u32 = SCREEN_IDS;
+
+struct Screen<M> {
+    builder: PageBuilder<M>,
+    page: Page<M>,
 }
 
 pub struct Adapter<M> {
     inner: M,
     hooks: Hooks<M>,
     ticks: u64,
+    settings: Option<Page<M>>,
+    screen: Option<Screen<M>>,
 }
 
 impl<M: Mod> Adapter<M> {
@@ -25,11 +38,15 @@ impl<M: Mod> Adapter<M> {
         let mut hooks = Hooks::new();
         let inner = M::init(&mut hooks).map_err(crate::Error::into_message)?;
         let registration = hooks.registration();
-        let adapter = Self {
+        let mut adapter = Self {
             inner,
             hooks,
             ticks: 0,
+            settings: None,
+            screen: None,
         };
+        adapter.refresh_settings(true);
+        adapter.flush_ui();
         Ok((adapter, registration))
     }
 
@@ -47,25 +64,117 @@ impl<M: Mod> Adapter<M> {
                 handler(&mut self.inner);
             }
         }
+        self.flush_ui();
     }
 
     pub fn frame(&mut self, seconds: f32) {
         if let Some(handler) = self.hooks.frame {
             handler(&mut self.inner, seconds);
         }
+        self.flush_ui();
     }
 
     pub fn command(&mut self, name: &str, args: &str) -> Result<Option<String>, String> {
-        match self.hooks.find_command(name) {
+        let result = match self.hooks.find_command(name) {
             Some(handler) => handler(&mut self.inner, Args::for_command(name, args))
                 .map_err(crate::Error::into_message),
             None => Err(format!("Unknown command /{name}")),
-        }
+        };
+        self.flush_ui();
+        result
     }
 
     pub fn chat(&mut self, text: &str) {
         if let Some(handler) = self.hooks.chat {
             handler(&mut self.inner, text);
+        }
+        self.flush_ui();
+    }
+
+    pub fn ui_select(&mut self, id: u32, row: u32) {
+        let acted = match id.checked_sub(SCREEN_IDS) {
+            Some(index) => self
+                .screen
+                .as_ref()
+                .is_some_and(|screen| screen.page.activate(&mut self.inner, index, row)),
+            None => self
+                .settings
+                .as_ref()
+                .is_some_and(|page| page.activate(&mut self.inner, id, row)),
+        };
+        self.flush_ui();
+        if acted {
+            self.refresh_settings(false);
+            self.refresh_screen();
+        }
+    }
+
+    pub fn ui_closed(&mut self) {
+        if self.screen.take().is_some()
+            && let Some(handler) = self.hooks.screen_closed
+        {
+            handler(&mut self.inner);
+        }
+        self.flush_ui();
+    }
+
+    pub fn ui_settings_opened(&mut self) {
+        self.refresh_settings(true);
+        self.flush_ui();
+    }
+
+    fn flush_ui(&mut self) {
+        let requests = ui::take_requests();
+        let Some(host) = ui::active_host() else {
+            return;
+        };
+        match requests.screen {
+            Some(ScreenRequest::Open(builder)) => {
+                if let Ok(builder) = builder.downcast::<PageBuilder<M>>() {
+                    let page = Page::build(&self.inner, *builder);
+                    (host.open_screen)(page.title(), page.widgets());
+                    self.screen = Some(Screen {
+                        builder: *builder,
+                        page,
+                    });
+                }
+            }
+            Some(ScreenRequest::Close) => {
+                let was_open = self.screen.take().is_some();
+                if was_open {
+                    (host.close_screen)();
+                }
+            }
+            None => {}
+        }
+        if requests.refresh {
+            self.refresh_settings(false);
+            self.refresh_screen();
+        }
+    }
+
+    fn refresh_settings(&mut self, force: bool) {
+        let (Some(builder), Some(host)) = (self.hooks.settings, ui::active_host()) else {
+            return;
+        };
+        let page = Page::build(&self.inner, builder);
+        let changed = self
+            .settings
+            .as_ref()
+            .is_none_or(|old| old.widgets() != page.widgets());
+        if force || changed {
+            (host.set_settings)(page.widgets());
+        }
+        self.settings = Some(page);
+    }
+
+    fn refresh_screen(&mut self) {
+        if let (Some(screen), Some(host)) = (self.screen.as_mut(), ui::active_host()) {
+            let page = Page::build(&self.inner, screen.builder);
+            if page.title() != screen.page.title() || page.widgets() != screen.page.widgets() {
+                (host.open_screen)(page.title(), page.widgets());
+            }
+            screen.page = page;
         }
     }
 }

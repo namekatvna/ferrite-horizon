@@ -14,12 +14,14 @@ pub mod game;
 pub mod hud;
 pub mod log;
 pub mod storage;
+pub mod ui;
 
 pub use args::{ArgCursor, Args, CommandResult, FromArgs};
 pub use error::Error;
 pub use ferrite_macros::FromArgs;
 pub use hooks::{
-    ChatHandler, CommandHandler, FrameHandler, Hooks, TICKS_PER_SECOND, TickHandler, TimerHandler,
+    ChatHandler, CommandHandler, FrameHandler, Hooks, ScreenClosedHandler, TICKS_PER_SECOND,
+    TickHandler, TimerHandler,
 };
 pub use mod_trait::Mod;
 
@@ -29,9 +31,10 @@ pub mod prelude {
     #[cfg(feature = "serde")]
     pub use crate::config::Config;
     pub use crate::hud::{Color, Corner, Panel};
+    pub use crate::ui::Page;
     pub use crate::{
         Args, CommandResult, Error, FromArgs, Hooks, Mod, chat, command, export_mod, game, hud,
-        log, storage,
+        log, storage, ui,
     };
 }
 
@@ -79,9 +82,15 @@ macro_rules! export_mod {
             }
 
             impl sdk::UiEventsGuest for Export {
-                fn select(_id: u32, _row: u32) {}
-                fn closed() {}
-                fn settings_opened() {}
+                fn select(id: u32, row: u32) {
+                    with(|m| m.ui_select(id, row))
+                }
+                fn closed() {
+                    with(|m| m.ui_closed())
+                }
+                fn settings_opened() {
+                    with(|m| m.ui_settings_opened())
+                }
             }
 
             #[cfg(target_arch = "wasm32")]
