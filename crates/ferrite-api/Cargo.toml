@@ -1,0 +1,12 @@
+[package]
+name = "ferrite-api"
+description = "Stable mod API for Horizon. Mods depend on this crate only."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+ferrite-macros.workspace = true
