@@ -18,7 +18,7 @@ impl %type% {
     fn hello(&mut self, args: Args) -> CommandResult {
         let who = args.word(0).unwrap_or("world");
         chat::show(format!("Hello, {who}!"));
-        Ok(Some(format!("{} ticks since load", self.ticks)))
+        reply(format!("{} ticks since load", self.ticks))
     }
 }
 

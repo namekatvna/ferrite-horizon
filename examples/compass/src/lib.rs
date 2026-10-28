@@ -35,7 +35,7 @@ impl Mod for Compass {
         hooks
             .on_tick(Self::tick)
             .settings(Self::settings_page)
-            .command("compass", Self::compass)
+            .parsed_command("compass", Self::compass)
             .command("day", Self::day);
         Ok(Self {
             settings: Config::load(),
@@ -46,25 +46,15 @@ impl Mod for Compass {
 impl Compass {
     fn settings_page(&self, page: &mut Page<Self>) {
         page.toggle("Visible", self.settings.visible, |m, on| {
-            m.change(|s| s.visible = on)
+            m.settings.edit(|s| s.visible = on)
         })
         .cycle(
             "Corner",
             &Corner::ALL,
             &self.settings.corner,
-            |m, corner| m.change(|s| s.corner = corner),
+            |m, corner| m.settings.edit(|s| s.corner = corner),
         )
-        .button("Reset", |m| {
-            if let Err(error) = m.settings.reset() {
-                log::warn(format!("compass: {error}"));
-            }
-        });
-    }
-
-    fn change(&mut self, edit: impl FnOnce(&mut Settings)) {
-        if let Err(error) = self.settings.update(edit) {
-            log::warn(format!("compass: {error}"));
-        }
+        .button("Reset", |m| m.settings.edit(|s| *s = Settings::default()));
     }
 
     fn tick(&mut self, _tick: u64) {
@@ -92,25 +82,22 @@ impl Compass {
             .show();
     }
 
-    fn compass(&mut self, args: Args) -> CommandResult {
-        match args.parse()? {
+    fn compass(&mut self, command: CompassCommand) -> CommandResult {
+        match command {
             CompassCommand::Toggle => {
                 let visible = self.settings.update(|s| {
                     s.visible = !s.visible;
                     s.visible
                 })?;
-                Ok(Some(format!(
-                    "Compass {}",
-                    if visible { "on" } else { "off" }
-                )))
+                reply(format!("Compass {}", if visible { "on" } else { "off" }))
             }
             CompassCommand::Corner { corner } => {
                 self.settings.update(|s| s.corner = corner)?;
-                Ok(Some(format!("Compass moved to {corner}")))
+                reply(format!("Compass moved to {corner}"))
             }
             CompassCommand::Reset => {
                 self.settings.reset()?;
-                Ok(Some("Compass settings reset".into()))
+                reply("Compass settings reset")
             }
         }
     }
@@ -118,7 +105,7 @@ impl Compass {
     fn day(&mut self, _args: Args) -> CommandResult {
         command::run("/time set day");
         chat::show("Good morning!");
-        Ok(None)
+        no_reply()
     }
 }
 
@@ -189,7 +176,6 @@ mod tests {
             game.command("compass corner bottom-right"),
             Ok(Some("Compass moved to bottom-right".into()))
         );
-        game.open_settings();
         assert!(game.settings().contains(&ui::Widget::Button {
             label: "Corner: bottom-right".into()
         }));

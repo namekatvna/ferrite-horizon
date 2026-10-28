@@ -23,11 +23,11 @@ impl Hello {
             args.as_str()
         };
         chat::show(format!("Hello, {who}!"));
-        Ok(None)
+        no_reply()
     }
 
     fn ticks(&mut self, _args: Args) -> CommandResult {
-        Ok(Some(format!("{} ticks since load", self.ticks)))
+        reply(format!("{} ticks since load", self.ticks))
     }
 }
 
