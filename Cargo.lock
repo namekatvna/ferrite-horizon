@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "cargo-ferrite"
+version = "0.0.1"
+
+[[package]]
 name = "ferrite-api"
 version = "0.0.1"
 dependencies = [

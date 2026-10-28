@@ -4,6 +4,7 @@ members = [
     "crates/ferrite-api",
     "crates/ferrite-macros",
     "crates/ferrite-common",
+    "crates/cargo-ferrite",
 ]
 
 [workspace.package]
