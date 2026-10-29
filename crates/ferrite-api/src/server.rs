@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
@@ -94,14 +95,37 @@ impl BlockState {
 
     pub fn new(state: impl Into<String>) -> Self {
         let state = state.into();
+        if is_trimmed(&state) && has_namespace(&state) {
+            return Self(state);
+        }
+        Self::from_text(&state)
+    }
+
+    fn from_text(state: &str) -> Self {
         let state = state.trim();
-        let id_end = state.find('[').unwrap_or(state.len());
-        if state[..id_end].contains(':') {
+        if has_namespace(state) {
             Self(state.to_owned())
         } else {
-            Self(format!("minecraft:{state}"))
+            Self::with_namespace(state)
         }
     }
+
+    pub(crate) fn text(state: &str) -> Cow<'_, str> {
+        if is_trimmed(state) && has_namespace(state) {
+            Cow::Borrowed(state)
+        } else {
+            Cow::Owned(Self::from_text(state).0)
+        }
+    }
+
+    fn with_namespace(state: &str) -> Self {
+        let mut full = String::with_capacity(Self::NAMESPACE.len() + state.len());
+        full.push_str(Self::NAMESPACE);
+        full.push_str(state);
+        Self(full)
+    }
+
+    const NAMESPACE: &'static str = "minecraft:";
 
     pub fn air() -> Self {
         Self(Self::AIR.to_owned())
@@ -112,16 +136,28 @@ impl BlockState {
     }
 
     pub fn id(&self) -> &str {
-        self.0.split('[').next().unwrap_or(&self.0)
+        let end = self
+            .0
+            .bytes()
+            .position(|byte| byte == b'[')
+            .unwrap_or(self.0.len());
+        &self.0[..end]
     }
 
     pub fn is(&self, id: &str) -> bool {
-        let id = id.trim();
-        if id.contains(':') {
-            self.id() == id
-        } else {
-            self.id().strip_prefix("minecraft:") == Some(id)
+        let id = if is_trimmed(id) { id } else { id.trim() };
+        let own = self.id();
+        if own.len() == id.len() {
+            return own == id;
         }
+        own.len() == Self::NAMESPACE.len() + id.len()
+            && own.as_bytes()[Self::NAMESPACE.len()..] == *id.as_bytes()
+            && own.starts_with(Self::NAMESPACE)
+            && !has_namespace(id)
+    }
+
+    pub(crate) fn from_host(state: String) -> Self {
+        Self(state)
     }
 
     pub fn is_air(&self) -> bool {
@@ -141,6 +177,23 @@ impl BlockState {
     }
 }
 
+fn has_namespace(state: &str) -> bool {
+    for &byte in state.as_bytes() {
+        match byte {
+            b':' => return true,
+            b'[' => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
+fn is_trimmed(state: &str) -> bool {
+    let bytes = state.as_bytes();
+    let plain = |byte: Option<&u8>| byte.is_none_or(|b| b.is_ascii_graphic());
+    plain(bytes.first()) && plain(bytes.last())
+}
+
 impl fmt::Display for BlockState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -149,7 +202,7 @@ impl fmt::Display for BlockState {
 
 impl From<&str> for BlockState {
     fn from(state: &str) -> Self {
-        Self::new(state)
+        Self::from_text(state)
     }
 }
 
@@ -175,7 +228,7 @@ impl FromStr for BlockState {
     type Err = std::convert::Infallible;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        Ok(Self::new(text))
+        Ok(Self::from_text(text))
     }
 }
 
@@ -204,5 +257,39 @@ mod tests {
         assert_eq!(BlockState::from("mymod:ruby").id(), "mymod:ruby");
         assert!(BlockState::from("cave_air").is_air());
         assert!(!BlockState::from("stone").is_air());
+    }
+
+    #[test]
+    fn states_are_normalized_once() {
+        assert_eq!(BlockState::new("  stone ").as_str(), "minecraft:stone");
+        assert_eq!(
+            BlockState::new(" minecraft:stone\n").as_str(),
+            "minecraft:stone"
+        );
+        assert_eq!(
+            BlockState::new("oak_log[axis=y]").as_str(),
+            "minecraft:oak_log[axis=y]"
+        );
+        assert_eq!(
+            BlockState::from("chest[facing=north,type=left]").id(),
+            "minecraft:chest"
+        );
+        assert_eq!(BlockState::text("minecraft:stone"), "minecraft:stone");
+        assert!(matches!(
+            BlockState::text("minecraft:stone"),
+            Cow::Borrowed(_)
+        ));
+        assert!(matches!(BlockState::text("stone"), Cow::Owned(_)));
+    }
+
+    #[test]
+    fn is_matches_whole_ids_only() {
+        let stone = BlockState::from("stone");
+        assert!(stone.is(" stone ") && stone.is("minecraft:stone"));
+        assert!(!stone.is("tone") && !stone.is("minecraft:ston") && !stone.is("stones"));
+        assert!(!stone.is("other:stone") && !stone.is(""));
+        let ruby = BlockState::from("mymod:ruby");
+        assert!(ruby.is("mymod:ruby") && !ruby.is("ruby"));
+        assert!(!BlockState::from("minecraft:foo:bar").is("foo:bar"));
     }
 }

@@ -140,15 +140,15 @@ mod wasm {
 
     pub(crate) fn server_set_blocks(
         dimension: &str,
-        changes: &[(BlockPos, String)],
+        changes: &[(BlockPos, &str)],
     ) -> Result<(), String> {
-        let changes: Vec<server_sdk::world::BlockChange> = changes
+        let changes: Vec<server_sdk::world::BlockChange<'_>> = changes
             .iter()
-            .map(|(pos, state)| server_sdk::world::BlockChange {
+            .map(|&(pos, state)| server_sdk::world::BlockChange {
                 x: pos.x,
                 y: pos.y,
                 z: pos.z,
-                state: state.clone(),
+                state,
             })
             .collect();
         server_sdk::world::set_blocks(dimension, &changes)

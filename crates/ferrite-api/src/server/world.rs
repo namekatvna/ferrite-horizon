@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::game::{BlockPos, Dimension};
 use crate::server::BlockState;
 use crate::{Error, host};
@@ -5,44 +7,91 @@ use crate::{Error, host};
 pub const MAX_CHANGES_PER_CALL: usize = 4096;
 
 pub fn block(dimension: &Dimension, pos: BlockPos) -> Option<BlockState> {
-    host::server_get_block(dimension.id(), pos).map(BlockState::new)
+    host::server_get_block(dimension.id(), pos).map(BlockState::from_host)
 }
 
 pub fn biome(dimension: &Dimension, pos: BlockPos) -> Option<String> {
     host::server_get_biome(dimension.id(), pos)
 }
 
-pub fn set_block(
+pub trait AsBlockState<'a> {
+    #[doc(hidden)]
+    fn block_state(self) -> Cow<'a, str>;
+}
+
+impl<'a> AsBlockState<'a> for BlockState {
+    fn block_state(self) -> Cow<'a, str> {
+        Cow::Owned(self.0)
+    }
+}
+
+impl<'a> AsBlockState<'a> for &'a BlockState {
+    fn block_state(self) -> Cow<'a, str> {
+        Cow::Borrowed(self.as_str())
+    }
+}
+
+impl<'a> AsBlockState<'a> for &'a str {
+    fn block_state(self) -> Cow<'a, str> {
+        BlockState::text(self)
+    }
+}
+
+impl<'a> AsBlockState<'a> for &'a String {
+    fn block_state(self) -> Cow<'a, str> {
+        BlockState::text(self)
+    }
+}
+
+impl<'a> AsBlockState<'a> for String {
+    fn block_state(self) -> Cow<'a, str> {
+        Cow::Owned(BlockState::new(self).0)
+    }
+}
+
+pub fn set_block<'a>(
     dimension: &Dimension,
     pos: BlockPos,
-    state: impl Into<BlockState>,
+    state: impl AsBlockState<'a>,
 ) -> Result<(), Error> {
     set_blocks(dimension, [(pos, state)]).map(|_| ())
 }
 
-pub fn set_blocks<I, S>(dimension: &Dimension, changes: I) -> Result<usize, Error>
+pub fn set_blocks<'a, I, S>(dimension: &Dimension, changes: I) -> Result<usize, Error>
 where
     I: IntoIterator<Item = (BlockPos, S)>,
-    S: Into<BlockState>,
+    S: AsBlockState<'a>,
 {
-    let mut batch: Vec<(BlockPos, String)> = Vec::new();
+    let mut changes = changes.into_iter();
+    let mut batch: Vec<(BlockPos, Cow<'a, str>)> =
+        Vec::with_capacity(changes.size_hint().0.min(MAX_CHANGES_PER_CALL));
     let mut total = 0;
-    for (pos, state) in changes {
-        let state: BlockState = state.into();
-        batch.push((pos, state.into()));
-        if batch.len() == MAX_CHANGES_PER_CALL {
-            total += send(dimension, &mut batch)?;
+    loop {
+        batch.clear();
+        batch.extend(
+            changes
+                .by_ref()
+                .take(MAX_CHANGES_PER_CALL)
+                .map(|(pos, state)| (pos, state.block_state())),
+        );
+        if batch.is_empty() {
+            return Ok(total);
         }
+        total += send(
+            dimension,
+            batch.iter().map(|(pos, state)| (*pos, state.as_ref())),
+        )?;
     }
-    if !batch.is_empty() {
-        total += send(dimension, &mut batch)?;
-    }
-    Ok(total)
 }
 
-fn send(dimension: &Dimension, batch: &mut Vec<(BlockPos, String)>) -> Result<usize, Error> {
-    host::server_set_blocks(dimension.id(), batch).map_err(Error::new)?;
-    let sent = batch.len();
-    batch.clear();
-    Ok(sent)
+fn send<'a>(
+    dimension: &Dimension,
+    changes: impl Iterator<Item = (BlockPos, &'a str)>,
+) -> Result<usize, Error> {
+    let changes: Vec<(BlockPos, &str)> = changes.collect();
+    if changes.is_empty() {
+        return Ok(0);
+    }
+    host::server_set_blocks(dimension.id(), &changes).map_err(Error::new)?;
+    Ok(changes.len())
 }

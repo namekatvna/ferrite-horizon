@@ -25,6 +25,7 @@ pub mod server_sdk {
         pub_export_macro: true,
         export_macro_name: "__export_horizon_server_mod",
         default_bindings_module: "ferrite_api::__private::server_sdk",
+        ownership: Borrowing { duplicate_if_necessary: true },
         with: {
             "horizon:mods/log@0.1.0": crate::__private::sdk::log,
             "horizon:mods/storage@0.1.0": crate::__private::sdk::storage,
@@ -58,7 +59,7 @@ pub fn block_pos(pos: server_sdk::BlockPos) -> BlockPos {
 }
 
 pub fn block_state(state: String) -> BlockState {
-    BlockState::new(state)
+    BlockState::from_host(state)
 }
 
 pub fn values(values: Vec<(String, server_sdk::ArgumentValue)>) -> Vec<(String, ArgumentValue)> {

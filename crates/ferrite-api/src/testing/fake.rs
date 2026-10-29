@@ -78,7 +78,7 @@ pub(crate) fn server_get_biome(_dimension: &str, _pos: BlockPos) -> Option<Strin
 
 pub(crate) fn server_set_blocks(
     dimension: &str,
-    changes: &[(BlockPos, String)],
+    changes: &[(BlockPos, &str)],
 ) -> Result<(), String> {
     if changes.len() > crate::server::world::MAX_CHANGES_PER_CALL {
         return Err(format!(
@@ -93,7 +93,7 @@ pub(crate) fn server_set_blocks(
         f.server.pending.extend(
             changes
                 .iter()
-                .map(|(pos, state)| (dimension.to_owned(), *pos, state.clone())),
+                .map(|&(pos, state)| (dimension.to_owned(), pos, state.to_owned())),
         )
     });
     Ok(())
