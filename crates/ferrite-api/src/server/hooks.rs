@@ -2,6 +2,7 @@ use std::fmt;
 
 use crate::game::BlockPos;
 use crate::hooks::{TICKS_PER_SECOND, TickHandler, TimerHandler};
+use crate::server::edit;
 use crate::server::world::{DEFAULT_EDITS_PER_TICK, EditDone, MAX_EDITS_PER_TICK};
 use crate::server::{ArgumentKind, ArgumentSpec, BlockState, Player, Values};
 use crate::{Args, CommandResult, FromArgs};
@@ -34,6 +35,7 @@ pub struct ServerHooks<M> {
     pub(crate) block_place: Vec<BlockHandler<M>>,
     pub(crate) edit_done: Vec<EditDoneHandler<M>>,
     pub(crate) edits_per_tick: Option<usize>,
+    pub(crate) run_edits: Option<fn()>,
 }
 
 impl<M: 'static> ServerHooks<M> {
@@ -49,6 +51,7 @@ impl<M: 'static> ServerHooks<M> {
             block_place: Vec::new(),
             edit_done: Vec::new(),
             edits_per_tick: None,
+            run_edits: None,
         }
     }
 
@@ -152,11 +155,13 @@ impl<M: 'static> ServerHooks<M> {
 
     pub fn queue_edits(&mut self, blocks_per_tick: usize) -> &mut Self {
         self.edits_per_tick = Some(blocks_per_tick.clamp(1, MAX_EDITS_PER_TICK));
+        self.run_edits = Some(edit::run_tick);
         self
     }
 
     pub fn on_edit_done(&mut self, handler: EditDoneHandler<M>) -> &mut Self {
         self.edits_per_tick.get_or_insert(DEFAULT_EDITS_PER_TICK);
+        self.run_edits = Some(edit::run_tick);
         self.edit_done.push(handler);
         self
     }

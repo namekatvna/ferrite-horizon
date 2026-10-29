@@ -36,7 +36,9 @@ impl<M: ServerMod> ServerAdapter<M> {
     pub fn tick(&mut self, tick: u64) {
         host::forget_snapshot();
         self.ticks += 1;
-        edit::run_tick();
+        if let Some(run_edits) = self.hooks.run_edits {
+            run_edits();
+        }
         self.finish_edits();
         for handler in &self.hooks.tick {
             handler(&mut self.inner, tick);
