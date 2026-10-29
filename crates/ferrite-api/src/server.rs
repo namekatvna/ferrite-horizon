@@ -15,8 +15,9 @@ pub mod world;
 pub use args::{ArgumentKind, ArgumentSpec, ArgumentValue, ServerArgument, Values};
 pub use hooks::{
     BlockHandler, PlayerHandler, ServerChatHandler, ServerCommandHandler, ServerHooks,
-    TypedServerCommandHandler,
+    SimpleServerCommandHandler, TypedServerCommandHandler,
 };
+pub use players::PlayerMap;
 
 pub trait ServerMod: Sized + 'static {
     fn init(hooks: &mut ServerHooks<Self>) -> Result<Self, Error>;
@@ -236,7 +237,9 @@ pub mod prelude {
     #[cfg(feature = "serde")]
     pub use crate::config::Config;
     pub use crate::game::{BlockPos, Dimension, Vec3};
-    pub use crate::server::{BlockState, GameMode, Player, ServerHooks, ServerMod, players, world};
+    pub use crate::server::{
+        BlockState, GameMode, Player, PlayerMap, ServerHooks, ServerMod, players, world,
+    };
     pub use crate::{
         Args, CommandResult, Error, FromArgs, export_server_mod, log, no_reply, reply, storage,
     };

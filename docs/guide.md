@@ -516,6 +516,7 @@ export_server_mod!(Beacons);
 |---|---|---|
 | `command(name, f)` | `fn(&mut self, &Player, Args) -> CommandResult` | `/name ...` typed by a player |
 | `parsed_command(name, f)` | `fn(&mut self, &Player, T) -> CommandResult` | the same, with a `FromArgs` value |
+| `simple_command(name, f)` | `fn(&mut self, &Player) -> CommandResult` | `/name` with nothing after it; the chat box shows no arguments and the server refuses extra text |
 | `on_tick(f)`, `every(n, f)`, `every_seconds(n, f)` | as for client mods | server ticks |
 | `on_join(f)`, `on_leave(f)` | `fn(&mut self, &Player)` | a player joins or leaves |
 | `on_chat(f)` | `fn(&mut self, &Player, &str)` | a chat message a player sends |
@@ -545,10 +546,22 @@ Enums with subcommands, and structs with other field types, are parsed from the 
 | `player.tell(text)`, `players::tell(&player, text)` | a message to one player; false when they left |
 | `players::broadcast(text)` | a message to everyone and the server log |
 | `world::block(&dimension, pos)` | `Option<BlockState>`: none where no chunk is loaded |
+| `world::blocks(&dimension, a, b)` | every loaded `(BlockPos, BlockState)` of the box from `a` to `b` |
 | `world::biome(&dimension, pos)` | the biome id |
 | `world::set_block(&dimension, pos, state)`, `world::set_blocks(&dimension, changes)` | changes blocks as `/setblock` does, after the hook returns |
+| `world::fill(&dimension, a, b, state)` | sets the whole box from `a` to `b` to one state |
 
-`world::set_blocks` takes any iterator of `(BlockPos, state)` and sends it in batches of 4096, the most Horizon takes in one call; it returns how many it sent. Changes are applied after the hook returns, so `world::block` still sees the old state during the same command. `BlockPos::cuboid(a, b)` walks every position of a box and `BlockPos::volume(a, b)` counts them. Players get at most 8 messages per hook call.
+`world::set_blocks` takes any iterator of `(BlockPos, state)` and sends it in batches of 4096, the most Horizon takes in one call; it returns how many it sent. A state is a `BlockState`, a `&BlockState`, a `&str` or a `String`. Changes are applied after the hook returns, so `world::block` still sees the old state during the same command. `BlockPos::cuboid(a, b)` walks every position of a box and `BlockPos::volume(a, b)` counts them. Players get at most 8 messages per hook call.
+
+`PlayerMap<T>` keeps a value per player, keyed by their id: `get`, `get_mut`, `get_or_default`, `insert`, `remove`, `retain_online`. Remove a player's entry in `on_leave` when it should not outlive the session.
+
+#### Staying within Horizon's time budget
+
+Horizon stops a server mod that runs more than about 100 million WebAssembly instructions in one command or event (50 million in a tick). Most of a block edit's cost is the text of block states, so:
+
+- `world::fill` is the cheapest way to set a box: about 250 instructions a block, around 300 000 blocks per command.
+- Pass `&BlockState` or a full id (`"minecraft:stone"`) to `set_blocks`: neither copies the text. A short id (`"stone"`) builds a new string for every block.
+- Reading costs about 600 instructions a block. A command that reads, compares and writes each block, like `examples/builder`'s `/replace`, handles about 45 000 blocks; keep a limit below that.
 
 `BlockState` wraps `minecraft:oak_log[axis=y]`: `id()` is `minecraft:oak_log`, `is("oak_log")` compares ids, `property("axis")` is `Some("y")`, `is_air()` covers every kind of air. `"stone".into()` is `minecraft:stone`.
 

@@ -22,6 +22,7 @@ All notable changes to Ferrite are listed here. The format follows [Keep a Chang
 - `BlockPos::cuboid`, `volume` and `neighbors`.
 - `testing::TestServer` and `ServerWorld`.
 - Example mod `builder`.
+- `ServerHooks::simple_command` for commands without arguments, `server::PlayerMap` for per-player state, `world::fill` for boxes of one state and `world::blocks` to read a box.
 - `testing::TestGame`: run a mod in `cargo test` against a fake game.
 - `cargo ferrite new | build | test | run | check | doctor`.
 - Example mods `hello` and `compass`, the modding guide and CI.

@@ -36,6 +36,7 @@ struct Builder {
     broken: Vec<String>,
     homes: Vec<String>,
     marks: Vec<(BlockPos, Option<String>)>,
+    visits: PlayerMap<u32>,
 }
 
 impl ServerMod for Builder {
@@ -52,11 +53,20 @@ impl ServerMod for Builder {
                 reply(format!("{}: {}", player.name, args.as_str()))
             })
             .command("big", Self::big)
+            .simple_command("visit", |m, player| {
+                let visits = m.visits.get_or_default(player);
+                *visits += 1;
+                reply(visits.to_string())
+            })
+            .simple_command("floor", Self::floor)
             .on_join(|m, player| {
                 m.joined.push(player.name.clone());
                 player.tell(format!("Welcome, {}!", player.name));
             })
-            .on_leave(|_, player| players::broadcast(format!("{} left", player.name)))
+            .on_leave(|m, player| {
+                m.visits.remove(player);
+                players::broadcast(format!("{} left", player.name));
+            })
             .on_block_break(Self::broken);
         Ok(Self::default())
     }
@@ -106,6 +116,16 @@ impl Builder {
             BlockPos::cuboid(base, base.offset(9, 49, 9)).map(|pos| (pos, "stone")),
         )?;
         reply(changed.to_string())
+    }
+
+    fn floor(&mut self, player: &Player) -> CommandResult {
+        let a = player.block_pos().offset(-1, -1, -1);
+        let b = player.block_pos().offset(1, -1, 1);
+        let stone = world::blocks(&player.dimension, a, b)
+            .filter(|(_, state)| state.is("stone"))
+            .count();
+        let placed = world::fill(&player.dimension, a, b, "stone")?;
+        reply(format!("{stone} stone before, {placed} placed"))
     }
 
     fn broken(&mut self, player: &Player, pos: BlockPos, state: &BlockState) {
@@ -267,6 +287,41 @@ fn block_events_see_what_was_there() {
     );
     assert!(server.block(BlockPos::new(1, 60, 1)).is_air());
     assert!(server.block(BlockPos::new(2, 60, 1)).is("bedrock"));
+}
+
+#[test]
+fn simple_commands_take_nothing_and_player_maps_keep_state_per_player() {
+    let mut server = TestServer::<Builder>::start();
+    server.join("Alex").join("Steve");
+    assert_eq!(server.command("Alex", "visit"), Ok(Some("1".into())));
+    assert_eq!(server.command("Alex", "visit"), Ok(Some("2".into())));
+    assert_eq!(server.command("Steve", "visit"), Ok(Some("1".into())));
+    assert_eq!(
+        server.command("Alex", "visit again"),
+        Err("Incorrect argument for command".into())
+    );
+    server.leave("Alex");
+    assert_eq!(server.state().visits.len(), 1);
+    server.join("Alex");
+    assert_eq!(server.command("Alex", "visit"), Ok(Some("1".into())));
+}
+
+#[test]
+fn fill_covers_a_box_and_blocks_reads_it() {
+    let mut server = TestServer::<Builder>::start_in(
+        ServerWorld::default().with_block(BlockPos::new(1, 63, 1), "stone"),
+    );
+    server.join("Alex");
+    assert_eq!(
+        server.command("Alex", "floor"),
+        Ok(Some("1 stone before, 9 placed".into()))
+    );
+    assert!(server.block(BlockPos::new(-1, 63, -1)).is("stone"));
+    assert!(server.block(BlockPos::new(0, 64, 0)).is_air());
+    assert_eq!(
+        server.command("Alex", "floor"),
+        Ok(Some("9 stone before, 9 placed".into()))
+    );
 }
 
 #[test]

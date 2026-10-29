@@ -10,6 +10,17 @@ pub fn block(dimension: &Dimension, pos: BlockPos) -> Option<BlockState> {
     host::server_get_block(dimension.id(), pos).map(BlockState::from_host)
 }
 
+pub fn blocks(
+    dimension: &Dimension,
+    a: BlockPos,
+    b: BlockPos,
+) -> impl Iterator<Item = (BlockPos, BlockState)> {
+    let dimension = dimension.id().to_owned();
+    BlockPos::cuboid(a, b).filter_map(move |pos| {
+        host::server_get_block(&dimension, pos).map(|state| (pos, BlockState::from_host(state)))
+    })
+}
+
 pub fn biome(dimension: &Dimension, pos: BlockPos) -> Option<String> {
     host::server_get_biome(dimension.id(), pos)
 }
@@ -81,6 +92,30 @@ where
             dimension,
             batch.iter().map(|(pos, state)| (*pos, state.as_ref())),
         )?;
+    }
+}
+
+pub fn fill<'a>(
+    dimension: &Dimension,
+    a: BlockPos,
+    b: BlockPos,
+    state: impl AsBlockState<'a>,
+) -> Result<usize, Error> {
+    let state = state.block_state();
+    let mut positions = BlockPos::cuboid(a, b);
+    let mut total = 0;
+    loop {
+        let sent = send(
+            dimension,
+            positions
+                .by_ref()
+                .take(MAX_CHANGES_PER_CALL)
+                .map(|pos| (pos, state.as_ref())),
+        )?;
+        if sent == 0 {
+            return Ok(total);
+        }
+        total += sent;
     }
 }
 

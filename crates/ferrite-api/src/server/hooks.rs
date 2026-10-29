@@ -7,6 +7,7 @@ use crate::{Args, CommandResult, FromArgs};
 
 pub type ServerCommandHandler<M> = for<'a> fn(&mut M, &'a Player, Args<'a>) -> CommandResult;
 pub type TypedServerCommandHandler<M, T> = fn(&mut M, &Player, T) -> CommandResult;
+pub type SimpleServerCommandHandler<M> = fn(&mut M, &Player) -> CommandResult;
 pub type PlayerHandler<M> = fn(&mut M, &Player);
 pub type ServerChatHandler<M> = for<'a> fn(&mut M, &'a Player, &'a str);
 pub type BlockHandler<M> = for<'a> fn(&mut M, &'a Player, BlockPos, &'a BlockState);
@@ -56,6 +57,22 @@ impl<M: 'static> ServerHooks<M> {
             Box::new(
                 move |state: &mut M, player: &Player, args: Args<'_>, _: &Values<'_>| {
                     handler(state, player, args)
+                },
+            ),
+        )
+    }
+
+    pub fn simple_command(
+        &mut self,
+        name: impl Into<String>,
+        handler: SimpleServerCommandHandler<M>,
+    ) -> &mut Self {
+        self.add(
+            name.into(),
+            Vec::new(),
+            Box::new(
+                move |state: &mut M, player: &Player, _: Args<'_>, _: &Values<'_>| {
+                    handler(state, player)
                 },
             ),
         )
