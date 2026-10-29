@@ -471,6 +471,8 @@ side = "server"
 capabilities = ["players", "world"]
 ```
 
+> **Single player:** the world runs on a built-in server, and that server starts its mods once, when the world loads. A server mod turned on in Options > Mods while you are in a world starts only after **Save and Quit to Title** and loading the world again; until then the game answers its commands with `Unknown or incomplete command`. Client mods start at once. If the mod still does nothing, Options > Mods shows `(Stopped: ...)` with the reason.
+
 ```rust
 use ferrite_api::server::prelude::*;
 
