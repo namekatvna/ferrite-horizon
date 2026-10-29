@@ -31,5 +31,5 @@ All notable changes to Ferrite are listed here. The format follows [Keep a Chang
 
 - The release profile of the workspace and of new mods adds `codegen-units = 1` and `strip = true`: mods are 14–17% smaller.
 - **Breaking:** registering `on_tick`, `on_frame`, `on_chat` or `on_screen_closed` again adds a handler instead of replacing the previous one.
-- Server block edits use 2–6 times less of Horizon's time budget: block states from the game and full ids are no longer copied, and `set_blocks` passes states to the game without copying them.
+- Server block edits use 2–6 times less of Horizon's time budget: block states from the game and full ids are no longer copied, and `set_blocks` passes states to the game without copying them. `examples/builder` now edits up to 32 768 blocks at once instead of 4096.
 - **Breaking:** `world::set_block` and `world::set_blocks` take states as `world::AsBlockState` (`BlockState`, `&BlockState`, `&str`, `String`) instead of `Into<BlockState>`.

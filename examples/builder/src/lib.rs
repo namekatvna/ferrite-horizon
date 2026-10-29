@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::VecDeque;
 
 use ferrite_api::server::prelude::*;
 
-const MAX_BLOCKS: u64 = 4096;
+const MAX_BLOCKS: u64 = 32768;
 const UNDO_STEPS: usize = 8;
 
 #[derive(FromArgs)]
@@ -25,12 +25,12 @@ struct Replace {
 struct Session {
     pos1: Option<BlockPos>,
     pos2: Option<BlockPos>,
-    undo: Vec<(Dimension, Vec<(BlockPos, BlockState)>)>,
+    undo: VecDeque<(Dimension, Vec<(BlockPos, BlockState)>)>,
 }
 
 #[derive(Default)]
 struct Builder {
-    sessions: HashMap<String, Session>,
+    sessions: PlayerMap<Session>,
 }
 
 impl ServerMod for Builder {
@@ -44,10 +44,10 @@ impl ServerMod for Builder {
             })
             .parsed_command("set", Self::set)
             .parsed_command("replace", Self::replace)
-            .command("undo", Self::undo)
-            .command("sel", Self::selection)
+            .simple_command("undo", Self::undo)
+            .simple_command("sel", Self::selection)
             .on_leave(|m, player| {
-                m.sessions.remove(&player.id);
+                m.sessions.remove(player);
             });
         Ok(Self::default())
     }
@@ -56,7 +56,7 @@ impl ServerMod for Builder {
 impl Builder {
     fn mark(&mut self, player: &Player, point: Point, first: bool) -> CommandResult {
         let pos = point.pos.unwrap_or_else(|| player.block_pos());
-        let session = self.sessions.entry(player.id.clone()).or_default();
+        let session = self.sessions.get_or_default(player);
         let (slot, name) = if first {
             (&mut session.pos1, "First")
         } else {
@@ -66,19 +66,19 @@ impl Builder {
         reply(format!("{name} corner at {pos}"))
     }
 
-    fn selection(&mut self, player: &Player, _args: Args) -> CommandResult {
+    fn selection(&mut self, player: &Player) -> CommandResult {
         let (a, b) = self.corners(player)?;
         reply(format!("{a} to {b}: {} blocks", BlockPos::volume(a, b)))
     }
 
     fn set(&mut self, player: &Player, set: Set) -> CommandResult {
-        let changed = self.edit(player, |_| Some(set.block.clone()))?;
+        let changed = self.edit(player, |_| Some(&set.block))?;
         reply(format!("Set {changed} blocks to {}", set.block.id()))
     }
 
     fn replace(&mut self, player: &Player, replace: Replace) -> CommandResult {
         let changed = self.edit(player, |old| {
-            old.is(replace.from.id()).then(|| replace.to.clone())
+            old.is(replace.from.id()).then_some(&replace.to)
         })?;
         reply(format!(
             "Replaced {changed} {} with {}",
@@ -87,25 +87,24 @@ impl Builder {
         ))
     }
 
-    fn undo(&mut self, player: &Player, _args: Args) -> CommandResult {
-        let session = self.sessions.entry(player.id.clone()).or_default();
-        let (dimension, blocks) = session.undo.pop().ok_or("Nothing to undo")?;
+    fn undo(&mut self, player: &Player) -> CommandResult {
+        let session = self.sessions.get_or_default(player);
+        let (dimension, blocks) = session.undo.pop_back().ok_or("Nothing to undo")?;
         let restored = world::set_blocks(&dimension, blocks)?;
         reply(format!("Restored {restored} blocks"))
     }
 
     fn corners(&self, player: &Player) -> Result<(BlockPos, BlockPos), Error> {
-        let session = self.sessions.get(&player.id);
-        match session.map(|s| (s.pos1, s.pos2)) {
+        match self.sessions.get(player).map(|s| (s.pos1, s.pos2)) {
             Some((Some(a), Some(b))) => Ok((a, b)),
             _ => Err("Select a box first with /pos1 and /pos2".into()),
         }
     }
 
-    fn edit(
+    fn edit<'s>(
         &mut self,
         player: &Player,
-        change: impl Fn(&BlockState) -> Option<BlockState>,
+        change: impl Fn(&BlockState) -> Option<&'s BlockState>,
     ) -> Result<usize, Error> {
         let (a, b) = self.corners(player)?;
         let volume = BlockPos::volume(a, b);
@@ -115,20 +114,17 @@ impl Builder {
         let dimension = &player.dimension;
         let mut before = Vec::new();
         let mut after = Vec::new();
-        for pos in BlockPos::cuboid(a, b) {
-            let Some(old) = world::block(dimension, pos) else {
-                continue;
-            };
-            if let Some(new) = change(&old).filter(|new| *new != old) {
+        for (pos, old) in world::blocks(dimension, a, b) {
+            if let Some(new) = change(&old).filter(|new| **new != old) {
                 after.push((pos, new));
                 before.push((pos, old));
             }
         }
         let changed = world::set_blocks(dimension, after)?;
-        let undo = &mut self.sessions.entry(player.id.clone()).or_default().undo;
-        undo.push((dimension.clone(), before));
+        let undo = &mut self.sessions.get_or_default(player).undo;
+        undo.push_back((dimension.clone(), before));
         if undo.len() > UNDO_STEPS {
-            undo.remove(0);
+            undo.pop_front();
         }
         Ok(changed)
     }
@@ -200,14 +196,18 @@ mod tests {
         let mut server = server();
         server.join("Steve");
         server.command("Alex", "pos1").unwrap();
-        server.command("Alex", "pos2 ~20 ~20 ~20").unwrap();
+        server.command("Alex", "pos2 ~40 ~40 ~40").unwrap();
         assert_eq!(
             server.command("Steve", "set stone"),
             Err("Select a box first with /pos1 and /pos2".into())
         );
         assert_eq!(
             server.command("Alex", "set stone"),
-            Err("The box has 9261 blocks; the most is 4096".into())
+            Err("The box has 68921 blocks; the most is 32768".into())
+        );
+        assert_eq!(
+            server.command("Alex", "undo 2"),
+            Err("Incorrect argument for command".into())
         );
     }
 }
