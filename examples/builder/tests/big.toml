@@ -1,0 +1,47 @@
+[[step]]
+join = "Alex"
+
+[[step]]
+command = "pos1 0 0 0"
+
+[[step]]
+command = "pos2 63 15 63"
+
+[[step]]
+command = "set stone"
+expect.feedback = "Working on 65536 blocks (6% done); /cancel stops it"
+
+[[step]]
+command = "set dirt"
+expect.error = "Still working on the last edit (6% done); /cancel stops it"
+
+[[step]]
+ticks = 3
+
+[[step]]
+command = "cancel"
+expect.told = ["Alex: Set 16384 blocks to minecraft:stone before /cancel"]
+expect.blocks = [
+    { x = 0, y = 0, z = 0, state = "minecraft:stone" },
+    { x = 63, y = 3, z = 63, state = "minecraft:stone" },
+    { x = 0, y = 4, z = 0, state = "minecraft:air" },
+]
+
+[[step]]
+command = "undo"
+
+[[step]]
+ticks = 4
+expect.told = ["Alex: Restored 16384 blocks"]
+expect.blocks = [
+    { x = 0, y = 0, z = 0, state = "minecraft:air" },
+    { x = 63, y = 3, z = 63, state = "minecraft:air" },
+]
+
+[[step]]
+command = "set stone"
+
+[[step]]
+ticks = 16
+expect.told = ["Alex: Set 65536 blocks to minecraft:stone"]
+expect.blocks = [{ x = 63, y = 15, z = 63, state = "minecraft:stone" }]
