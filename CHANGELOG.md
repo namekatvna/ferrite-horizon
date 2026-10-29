@@ -23,6 +23,7 @@ All notable changes to Ferrite are listed here. The format follows [Keep a Chang
 - `testing::TestServer` and `ServerWorld`.
 - Example mod `builder`.
 - `ServerHooks::simple_command` for commands without arguments, `server::PlayerMap` for per-player state, `world::fill` for boxes of one state and `world::blocks` to read a box.
+- Queued edits (`world::Edit`, `ServerHooks::queue_edits`, `on_edit_done`): fills, replacements, any per-block rule and block lists of any size, done a slice per tick within a shared budget, with progress, cancelling and compact undo (`Snapshot`, 16 bytes a block). `TestServer::finish_edits` runs them to the end.
 - `testing::TestGame`: run a mod in `cargo test` against a fake game.
 - `cargo ferrite new | build | test | run | check | doctor`.
 - Example mods `hello` and `compass`, the modding guide and CI.

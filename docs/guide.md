@@ -523,6 +523,8 @@ export_server_mod!(Beacons);
 | `on_join(f)`, `on_leave(f)` | `fn(&mut self, &Player)` | a player joins or leaves |
 | `on_chat(f)` | `fn(&mut self, &Player, &str)` | a chat message a player sends |
 | `on_block_break(f)`, `on_block_place(f)` | `fn(&mut self, &Player, BlockPos, &BlockState)` | a player broke a block (the state is what was there) or placed one |
+| `queue_edits(blocks_per_tick)` | | turns on queued edits (below) |
+| `on_edit_done(f)` | `fn(&mut self, &mut EditDone)` | a queued edit finished, was cancelled or failed; also turns on queued edits |
 
 ### Commands with typed arguments
 
@@ -563,7 +565,45 @@ Horizon stops a server mod that runs more than about 100 million WebAssembly ins
 
 - `world::fill` is the cheapest way to set a box: about 250 instructions a block, around 300 000 blocks per command.
 - Pass `&BlockState` or a full id (`"minecraft:stone"`) to `set_blocks`: neither copies the text. A short id (`"stone"`) builds a new string for every block.
-- Reading costs about 600 instructions a block. A command that reads, compares and writes each block, like `examples/builder`'s `/replace`, handles about 45 000 blocks; keep a limit below that.
+- Reading costs about 600 instructions a block. A command that reads, compares and writes each block handles about 45 000 blocks in one call.
+- Anything bigger goes through the edit queue.
+
+### Queued edits (`world::Edit`)
+
+A queued edit is done a slice per tick, so a box of any size never stops the mod and never stalls the server. Ask for the queue in `init`, describe the edit, and queue it:
+
+```rust
+use ferrite_api::server::world::{Edit, EditDone};
+
+hooks
+    .queue_edits(4096)
+    .on_edit_done(|_, done: &mut EditDone| {
+        if let Some(player) = &done.player {
+            player.tell(format!("Changed {} blocks", done.changed));
+        }
+    });
+
+let edit = Edit::replace(&player.dimension, a, b, "stone", "glass")
+    .by(player)
+    .record_undo();
+let id = edit.queue()?;
+```
+
+| Edit | Does |
+|---|---|
+| `Edit::fill(&dimension, a, b, state)` | the whole box to one state; reads nothing unless recording undo |
+| `Edit::replace(&dimension, a, b, from, to)` | blocks with the id `from` (or exactly the state, when `from` has `[properties]`) to `to` |
+| `Edit::map(&dimension, a, b, \|pos, old\| ...)` | any rule: return `Some(new)` to change the block, `None` to keep it |
+| `Edit::set(&dimension, changes)` | a list of `(BlockPos, state)` |
+| `Edit::restore(&dimension, snapshot)` | puts a `Snapshot` back |
+| `.by(&player)` | the player who asked; `EditDone.player` gives them back |
+| `.record_undo()` | keeps what each changed block was; `done.take_undo()` returns the edit that puts it back |
+| `.size()` | blocks it will visit |
+| `.queue()` | starts it: `Ok(EditId)`; a state the game refuses is an `Err` here when the first slice runs at once, else `EditDone.error` |
+
+`queue()` starts work at once with what is left of this tick's budget, so a small edit is finished, and `on_edit_done` called, before the command returns. Every edit queued in one tick shares that tick's budget, and edits running together share each later tick. `world::progress(id)` gives `done` and `total` (and `percent()`) while an edit runs and `None` after; `world::cancel(id)` stops it, and `on_edit_done` sees `cancelled` with everything done so far, undo included. `EditDone.changed` counts the blocks changed; `error` holds the game's error if a block could not be set, after which the edit stops.
+
+The budget counts blocks visited, at most `world::MAX_EDITS_PER_TICK` (16 384); `on_edit_done` alone gives `world::DEFAULT_EDITS_PER_TICK` (4096), which reads, records and writes in a few milliseconds a tick. Undo is recorded as one copy of each distinct state plus 16 bytes a block, about 16 MiB for a million blocks: bound how much undo a mod keeps, since the whole mod has 64 MiB. Queued edits live in memory: a server restart or a mod reload drops them. `TestServer::finish_edits()` runs ticks until the queue is empty and returns how many it took.
 
 `BlockState` wraps `minecraft:oak_log[axis=y]`: `id()` is `minecraft:oak_log`, `is("oak_log")` compares ids, `property("axis")` is `Some("y")`, `is_air()` covers every kind of air. `"stone".into()` is `minecraft:stone`.
 
@@ -583,7 +623,7 @@ server.break_block("Steve", BlockPos::new(1, 64, 1));
 assert_eq!(server.take_broadcasts(), ["..."]);
 ```
 
-`TestServer` parses typed arguments as the server does (`~`, `@s`, ranges, vanilla's messages) and applies block changes after each call, as Horizon does. Players join at `0.5 64 0.5` in the overworld; `update_player(name, |p| ...)` moves them. It also has `leave`, `chat`, `place_block`, `tick`, `ticks`, `restart`, `block_in`, `set_block`, `take_told`, `take_log`, `file` and `file_text`. Unset blocks are air and the biome is `minecraft:plains`. In Horizon's sandbox, scripts use `join`, `as`, `break`, `place`, `blocks` and `expect.told`, `expect.broadcast`, `expect.blocks`: see `examples/builder`.
+`TestServer` parses typed arguments as the server does (`~`, `@s`, ranges, vanilla's messages) and applies block changes after each call, as Horizon does. Players join at `0.5 64 0.5` in the overworld; `update_player(name, |p| ...)` moves them. It also has `leave`, `chat`, `place_block`, `tick`, `ticks`, `finish_edits`, `restart`, `block_in`, `set_block`, `take_told`, `take_log`, `file` and `file_text`. Unset blocks are air and the biome is `minecraft:plains`. In Horizon's sandbox, scripts use `join`, `as`, `break`, `place`, `blocks` and `expect.told`, `expect.broadcast`, `expect.blocks`: see `examples/builder`.
 
 ## Testing
 
@@ -665,5 +705,9 @@ See `examples/compass` for a mod using every module, with scripts covering its H
 | Frame budget | about 0.1 ms |
 | `command::run` per hook | 8 |
 | HUD | 16 lines, 256 characters each |
+| Server mod work per command or event | about 100 million instructions |
+| Server mod work per tick | about 50 million instructions |
+| Blocks per `world::set_blocks` call to the game | 4096 (Ferrite splits bigger lists) |
+| Messages to players per hook | 8 |
 
 A mod over budget is flagged; a runaway mod is stopped without affecting others.

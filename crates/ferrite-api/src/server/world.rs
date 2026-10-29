@@ -4,6 +4,11 @@ use crate::game::{BlockPos, Dimension};
 use crate::server::BlockState;
 use crate::{Error, host};
 
+pub use crate::server::edit::{
+    DEFAULT_EDITS_PER_TICK, Edit, EditDone, EditId, MAX_EDITS_PER_TICK, Progress, Snapshot, cancel,
+    pending_edits, progress,
+};
+
 pub const MAX_CHANGES_PER_CALL: usize = 4096;
 
 pub fn block(dimension: &Dimension, pos: BlockPos) -> Option<BlockState> {

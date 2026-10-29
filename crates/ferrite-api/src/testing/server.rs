@@ -242,6 +242,19 @@ impl<M: ServerMod> TestServer<M> {
         self
     }
 
+    pub fn finish_edits(&mut self) -> u64 {
+        let mut ticks = 0;
+        while crate::server::world::pending_edits() > 0 {
+            assert!(
+                ticks < 1_000_000,
+                "queued edits did not finish in a million ticks"
+            );
+            self.tick();
+            ticks += 1;
+        }
+        ticks
+    }
+
     pub fn block(&self, pos: BlockPos) -> BlockState {
         self.block_in(&Dimension::Overworld, pos)
     }

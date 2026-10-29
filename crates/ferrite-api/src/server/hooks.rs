@@ -2,6 +2,7 @@ use std::fmt;
 
 use crate::game::BlockPos;
 use crate::hooks::{TICKS_PER_SECOND, TickHandler, TimerHandler};
+use crate::server::world::{DEFAULT_EDITS_PER_TICK, EditDone, MAX_EDITS_PER_TICK};
 use crate::server::{ArgumentKind, ArgumentSpec, BlockState, Player, Values};
 use crate::{Args, CommandResult, FromArgs};
 
@@ -11,6 +12,7 @@ pub type SimpleServerCommandHandler<M> = fn(&mut M, &Player) -> CommandResult;
 pub type PlayerHandler<M> = fn(&mut M, &Player);
 pub type ServerChatHandler<M> = for<'a> fn(&mut M, &'a Player, &'a str);
 pub type BlockHandler<M> = for<'a> fn(&mut M, &'a Player, BlockPos, &'a BlockState);
+pub type EditDoneHandler<M> = fn(&mut M, &mut EditDone);
 
 pub(crate) type Run<M> =
     Box<dyn for<'a, 'b> Fn(&mut M, &'a Player, Args<'a>, &'b Values<'b>) -> CommandResult>;
@@ -30,6 +32,8 @@ pub struct ServerHooks<M> {
     pub(crate) chat: Vec<ServerChatHandler<M>>,
     pub(crate) block_break: Vec<BlockHandler<M>>,
     pub(crate) block_place: Vec<BlockHandler<M>>,
+    pub(crate) edit_done: Vec<EditDoneHandler<M>>,
+    pub(crate) edits_per_tick: Option<usize>,
 }
 
 impl<M: 'static> ServerHooks<M> {
@@ -43,6 +47,8 @@ impl<M: 'static> ServerHooks<M> {
             chat: Vec::new(),
             block_break: Vec::new(),
             block_place: Vec::new(),
+            edit_done: Vec::new(),
+            edits_per_tick: None,
         }
     }
 
@@ -144,6 +150,17 @@ impl<M: 'static> ServerHooks<M> {
         self
     }
 
+    pub fn queue_edits(&mut self, blocks_per_tick: usize) -> &mut Self {
+        self.edits_per_tick = Some(blocks_per_tick.clamp(1, MAX_EDITS_PER_TICK));
+        self
+    }
+
+    pub fn on_edit_done(&mut self, handler: EditDoneHandler<M>) -> &mut Self {
+        self.edits_per_tick.get_or_insert(DEFAULT_EDITS_PER_TICK);
+        self.edit_done.push(handler);
+        self
+    }
+
     pub fn commands(&self) -> impl Iterator<Item = &str> {
         self.commands.iter().map(|c| c.name.as_str())
     }
@@ -185,6 +202,8 @@ impl<M> fmt::Debug for ServerHooks<M> {
             .field("chat", &self.chat.len())
             .field("block_break", &self.block_break.len())
             .field("block_place", &self.block_place.len())
+            .field("edit_done", &self.edit_done.len())
+            .field("edits_per_tick", &self.edits_per_tick)
             .finish()
     }
 }

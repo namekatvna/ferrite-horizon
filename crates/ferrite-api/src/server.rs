@@ -6,6 +6,7 @@ use crate::Error;
 use crate::game::{BlockPos, Dimension, Vec3};
 
 mod args;
+mod edit;
 mod export;
 mod hooks;
 pub mod players;
@@ -14,8 +15,8 @@ pub mod world;
 
 pub use args::{ArgumentKind, ArgumentSpec, ArgumentValue, ServerArgument, Values};
 pub use hooks::{
-    BlockHandler, PlayerHandler, ServerChatHandler, ServerCommandHandler, ServerHooks,
-    SimpleServerCommandHandler, TypedServerCommandHandler,
+    BlockHandler, EditDoneHandler, PlayerHandler, ServerChatHandler, ServerCommandHandler,
+    ServerHooks, SimpleServerCommandHandler, TypedServerCommandHandler,
 };
 pub use players::PlayerMap;
 
